@@ -36,6 +36,11 @@ r[env.prefixed-unknown]
 With a prefix, a variable starting with the prefix that matches no field MUST be passed on
 under the config path derived from its name, so the engine reports it as an unknown path.
 
+r[env.dynamic-keys]
+With a prefix, variables MUST be able to set fields under map keys, such as
+`APP__BACKENDS__EU_WEST__REGION` for `backends.eu_west.region`. Map keys derived from
+variable names are lowercased.
+
 r[env.invalid-name]
 With a prefix, a variable starting with the prefix that matches no field and can't be
 turned into a config path MUST fail the source, unless unknown paths are allowed.

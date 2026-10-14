@@ -205,6 +205,7 @@ impl ConfigSource for EnvSource {
 }
 
 impl EnvSource {
+    // r[impl env.dynamic-keys]
     /// Derives a config path from a variable name with the prefix stripped, such as
     /// `JWT__TTL` becoming `jwt.ttl`.
     fn path_from_name(&self, name: &str) -> Option<ConfigPath> {
@@ -375,6 +376,24 @@ mod tests {
     }
 
     // r[verify env.not-unicode]
+    // r[verify env.dynamic-keys]
+    #[test]
+    fn prefixed_variables_set_fields_under_map_keys() {
+        #[derive(Facet)]
+        struct WithLabels {
+            labels: std::collections::HashMap<String, String>,
+        }
+        static LABELS: Schema = Schema::new::<WithLabels>();
+
+        let source = EnvSource::from_vars([("APP__LABELS__TEAM", "storage")]).prefix("APP");
+        let candidates = source.load(&LABELS).unwrap();
+        let [candidate] = candidates.as_slice() else {
+            panic!("expected one candidate");
+        };
+        assert_eq!(candidate.path().to_string(), "labels.team");
+        assert!(LABELS.layer(candidate.path()).is_some());
+    }
+
     #[cfg(unix)]
     #[test]
     fn non_unicode_values_fail() {
