@@ -1,0 +1,5 @@
+error: `#[config(...)]` is only supported on fields
+ --> tests/ui/struct_attribute.rs:4:5
+  |
+4 |     #[config(path = "app")]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^

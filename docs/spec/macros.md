@@ -1,0 +1,46 @@
+# Macros
+
+Config models are declared with the `#[config]` attribute on normal structs, or with the
+`config_tree!` macro for nested declarations.
+
+## Declaring models
+
+r[macro.attribute]
+`#[config]` on a struct with named fields MUST derive `Facet` for it and implement
+`ConfigModel`.
+
+r[macro.tree]
+`config_tree!` MUST accept struct declarations as field types and expand every declared
+struct as if it had `#[config]`, with nested structs as their own types.
+
+r[macro.tree.derives]
+`config_tree!` MUST pass a struct's `#[derive(...)]` attributes on to the structs nested
+in it.
+
+r[macro.raw-idents]
+A field named with a raw identifier MUST use the name without the `r#` prefix as its
+config path segment.
+
+## Field attributes
+
+r[macro.path]
+`#[config(path = "segment")]` on a field MUST use `segment` as the field's config path
+segment instead of its name.
+
+r[macro.secret]
+`#[config(secret)]` on a field MUST mark the field as secret.
+
+## Errors
+
+r[macro.error.path]
+An overridden path that is not a single valid segment MUST be a compile error.
+
+r[macro.error.duplicate-path]
+Two fields of a struct with the same config path segment MUST be a compile error.
+
+r[macro.error.attributes]
+Unknown `config` attributes, duplicate `config` attributes, `#[config(...)]` on structs and
+`#[facet(rename)]` on fields MUST be compile errors.
+
+r[macro.error.shape]
+Generic structs and structs without named fields MUST be compile errors.

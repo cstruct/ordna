@@ -1,0 +1,5 @@
+error: config path segments must start with an ASCII letter or underscore
+ --> tests/ui/path_invalid.rs:5:21
+  |
+5 |     #[config(path = "1st")]
+  |                     ^^^^^

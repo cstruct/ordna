@@ -1,0 +1,12 @@
+# Build output
+/target/
+
+# trybuild writes failing compile-error output here, see crates/integration-tests
+wip/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store

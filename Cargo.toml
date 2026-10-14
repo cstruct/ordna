@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "crates/core",
+    "crates/integration-tests",
+    "crates/macros",
+    "crates/source-env",
+    "crates/source-file",
+    "crates/source-json",
+    "crates/source-styx",
+    "crates/source-toml",
+    "crates/source-yaml",
+]
+resolver = "2"

@@ -1,0 +1,18 @@
+[package]
+name = "integration-tests"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+
+[dev-dependencies]
+# Needed by `#[config(path = ...)]`, see the `config` macro docs.
+facet = "0.46.5"
+ordna-core = { package = "core", path = "../core" }
+source-env = { path = "../source-env" }
+source-file = { path = "../source-file" }
+source-json = { path = "../source-json" }
+source-styx = { path = "../source-styx" }
+source-toml = { path = "../source-toml" }
+source-yaml = { path = "../source-yaml" }
+trybuild = "1.0.122"

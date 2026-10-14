@@ -1,0 +1,11 @@
+error: duplicate config path `name`
+ --> tests/ui/duplicate_path.rs:7:5
+  |
+7 |     name: String,
+  |     ^^^^
+
+error: previously used here
+ --> tests/ui/duplicate_path.rs:5:21
+  |
+5 |     #[config(path = "name")]
+  |                     ^^^^^^

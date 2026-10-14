@@ -1,0 +1,5 @@
+error: use `#[config(path = "...")]` instead of `#[facet(rename = "...")]`
+ --> tests/ui/facet_rename.rs:5:5
+  |
+5 |     #[facet(rename = "title")]
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^

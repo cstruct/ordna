@@ -1,0 +1,5 @@
+error: config structs can't be generic
+ --> tests/ui/generic.rs:4:11
+  |
+4 | struct App<T> {
+  |           ^^^

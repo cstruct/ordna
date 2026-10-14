@@ -1,0 +1,5 @@
+error: config structs must have named fields
+ --> tests/ui/tuple_struct.rs:4:11
+  |
+4 | struct App(String);
+  |           ^^^^^^^^
