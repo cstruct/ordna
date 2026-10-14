@@ -20,7 +20,7 @@ The root of a parsed file MUST be an object, otherwise the source MUST fail.
 r[file.walk]
 Object keys MUST be walked into config paths: a key whose path is a field MUST provide the
 whole value for that field, including objects and lists, and an object whose path leads
-towards fields MUST be walked further.
+towards fields, such as a map or one of its entries, MUST be walked further.
 
 r[file.unknown-keys]
 Keys that are not fields MUST be passed on under their own config path, so the engine

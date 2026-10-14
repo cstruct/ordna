@@ -132,9 +132,10 @@ impl ConfigSource for EnvSource {
         schema: &'static Schema,
     ) -> Result<Vec<FieldCandidate<EnvVarDetail>>, Self::Error> {
         let name_prefix = self.name_prefix();
+        // Only fields without dynamic segments have names to look up; variables for fields
+        // under map keys are matched by the engine, see below.
         let fields = schema
-            .fields()
-            .into_iter()
+            .static_fields()
             .map(|path| {
                 let segments = path
                     .segments()

@@ -25,6 +25,11 @@ The winning value of every path MUST be decoded into the config model. Fields no
 set MUST be left to the model's defaults, and decoding MUST fail with a decode violation
 when a required field is missing or a value doesn't fit its field.
 
+r[load.merge]
+Values for different fields of the same struct or map entry MUST be merged into one value,
+whichever sources they come from, such as a backend's public fields from a public file and
+its credentials from a secrets file.
+
 r[load.decode.strings]
 String values MUST be parsed into the field's type when the field isn't a string, such as
 `"9090"` into a `u16`.

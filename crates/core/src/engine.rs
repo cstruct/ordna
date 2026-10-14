@@ -29,15 +29,13 @@ where
     P: SourceFieldPath,
 {
     let schema = T::schema();
-    let known_fields = schema.layers();
     let mut violations = ConfigViolations::default();
 
     // r[impl load.precedence]
     // Every candidate per path, in source order. The last one wins.
     let mut candidates = BTreeMap::<ConfigPath, Vec<FieldCandidate<P>>>::new();
     for source in &sources {
-        let source_candidates =
-            load_config_from_source(known_fields, source, schema, &mut violations)?;
+        let source_candidates = load_config_from_source(source, schema, &mut violations)?;
         for candidate in source_candidates {
             candidates
                 .entry(candidate.path().clone())
@@ -88,7 +86,6 @@ where
 /// reporting values for fields of another layer and paths the source provided more than
 /// once.
 fn load_config_from_source<P, E>(
-    known_fields: &BTreeMap<ConfigPath, ConfigLayer>,
     bound_source: &BoundSource<P, E>,
     schema: &'static crate::Schema,
     violations: &mut ConfigViolations,
@@ -104,7 +101,7 @@ where
     for field_candidate in source_values {
         // r[impl load.unknown-paths]
         // r[impl load.unknown-paths.allow]
-        let Some(&field_layer) = known_fields.get(field_candidate.path()) else {
+        let Some(field_layer) = schema.layer(field_candidate.path()) else {
             if !allow_unknown_paths {
                 violations.add_unknown_path_violation(
                     field_candidate.path().clone(),
@@ -136,7 +133,7 @@ where
     for (path, mut values) in field_values {
         // r[impl load.conflicts]
         if values.len() > 1 {
-            let field_layer = known_fields[&path];
+            let field_layer = schema.layer(&path).expect("only known paths are kept");
             violations.add_conflict_violation(ConflictIssue {
                 path,
                 source: source_meta.clone(),
@@ -152,6 +149,7 @@ where
     Ok(accepted)
 }
 
+// r[impl load.merge]
 /// Inserts `value` into `root` at `path`, creating intermediate objects.
 fn insert_nested(root: &mut VObject, path: &ConfigPath, value: Value) {
     let segments = path.segments();

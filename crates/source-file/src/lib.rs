@@ -15,7 +15,6 @@
 //! separate file from the rest of the config.
 
 use std::{
-    collections::BTreeSet,
     fmt, io,
     path::{Path, PathBuf},
     sync::Arc,
@@ -124,18 +123,9 @@ impl<F: FileFormat> ConfigSource for FileSource<F> {
             });
         };
 
-        let fields = schema.fields();
-        let branches = fields
-            .iter()
-            .flat_map(|path| {
-                let segments = path.segments();
-                (1..segments.len()).map(|len| segments[..len].to_vec())
-            })
-            .collect();
         let mut walker = Walker {
             source: self,
-            fields: &fields,
-            branches: &branches,
+            schema,
             candidates: Vec::new(),
         };
         walker.walk(root, &mut Vec::new())?;
@@ -145,9 +135,7 @@ impl<F: FileFormat> ConfigSource for FileSource<F> {
 
 struct Walker<'a, F> {
     source: &'a FileSource<F>,
-    fields: &'a BTreeSet<ConfigPath>,
-    /// Strict prefixes of the schema fields, i.e. paths of objects to walk into.
-    branches: &'a BTreeSet<Vec<ConfigPathSegment>>,
+    schema: &'static Schema,
     candidates: Vec<FieldCandidate<FileValueDetail>>,
 }
 
@@ -179,7 +167,8 @@ impl<F: FileFormat> Walker<'_, F> {
             let path = ConfigPath::new(segments.clone());
             match value.as_object() {
                 Some(object)
-                    if !self.fields.contains(&path) && self.branches.contains(segments) =>
+                    if self.schema.layer(&path).is_none()
+                        && self.schema.leads_to_fields(segments) =>
                 {
                     self.walk(object, segments)?;
                 }
@@ -346,6 +335,33 @@ mod tests {
             paths(&source),
             vec!["extra", "jwt.tll", "jwt.ttl_seconds", "name", "tags"]
         );
+    }
+
+    // r[verify file.walk]
+    #[test]
+    fn walks_into_map_entries() {
+        #[derive(Facet)]
+        struct WithLabels {
+            labels: std::collections::HashMap<String, String>,
+        }
+        static LABELS: Schema = Schema::new::<WithLabels>();
+
+        let value = object([(
+            "labels",
+            object([
+                ("team", Value::from("storage")),
+                ("tier", Value::from("hot")),
+            ]),
+        )]);
+        let source = FileSource::new(temp_file("maps"), Fixed(value));
+        let mut paths = source
+            .load(&LABELS)
+            .unwrap()
+            .iter()
+            .map(|candidate| candidate.path().to_string())
+            .collect::<Vec<_>>();
+        paths.sort();
+        assert_eq!(paths, vec!["labels.team", "labels.tier"]);
     }
 
     // r[verify file.missing]

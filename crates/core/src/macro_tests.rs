@@ -56,7 +56,7 @@ fn path_of(path: &str) -> ConfigPath {
 fn fields<T: ConfigModel<'static, NoPath, String>>() -> Vec<String> {
     T::schema()
         .fields()
-        .iter()
+        .keys()
         .map(ToString::to_string)
         .collect()
 }
@@ -292,5 +292,149 @@ mod secrets {
             ],
         )]);
         assert_eq!(issues, vec![("name".into(), ConfigLayer::Public, true)]);
+    }
+}
+
+mod maps {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    #[config]
+    #[derive(Debug, PartialEq)]
+    #[facet(tag = "type", rename_all = "snake_case")]
+    #[repr(C)]
+    pub enum Backend {
+        S3 {
+            bucket: String,
+            region: Option<String>,
+            #[config(secret)]
+            secret_access_key: String,
+        },
+        Swift {
+            container: String,
+            #[config(secret)]
+            password: String,
+        },
+    }
+
+    #[config]
+    #[derive(Debug, PartialEq)]
+    pub struct Hook {
+        pub url: String,
+        #[config(secret)]
+        pub token: String,
+    }
+
+    #[config]
+    #[derive(Debug)]
+    pub struct App {
+        pub backends: HashMap<String, Backend>,
+        pub labels: HashMap<String, String>,
+        pub tags: Vec<String>,
+        pub hooks: Option<Vec<Hook>>,
+    }
+
+    fn layers() -> Vec<(String, ConfigLayer)> {
+        <App as ConfigModel<'static, NoPath, String>>::schema()
+            .fields()
+            .iter()
+            .map(|(pattern, layer)| (pattern.to_string(), *layer))
+            .collect()
+    }
+
+    // r[verify schema.fields.maps]
+    // r[verify schema.fields.enums]
+    // r[verify schema.layer.nested-leaves]
+    // r[verify macro.enum]
+    #[test]
+    fn maps_and_tagged_enums_are_walked() {
+        use ConfigLayer::{Public, Secret};
+        assert_eq!(
+            layers(),
+            vec![
+                ("backends.*.bucket".into(), Public),
+                ("backends.*.container".into(), Public),
+                ("backends.*.password".into(), Secret),
+                ("backends.*.region".into(), Public),
+                ("backends.*.secret_access_key".into(), Secret),
+                ("backends.*.type".into(), Public),
+                // A list holding secrets is secret as a whole.
+                ("hooks".into(), Secret),
+                ("labels.*".into(), Public),
+                ("tags".into(), Public),
+            ]
+        );
+    }
+
+    // r[verify load.merge]
+    // r[verify schema.fields.maps]
+    #[test]
+    fn map_entries_merge_public_and_secret_sources() {
+        let app = try_load::<App>(vec![
+            (
+                ConfigLayer::Public,
+                vec![
+                    ("backends.eu-west.type", "s3"),
+                    ("backends.eu-west.bucket", "assets"),
+                    ("backends.archive.type", "swift"),
+                    ("backends.archive.container", "old"),
+                    ("labels.team", "storage"),
+                ],
+            ),
+            (
+                ConfigLayer::Secret,
+                vec![
+                    ("backends.eu-west.secret_access_key", "s3cr3t"),
+                    ("backends.archive.password", "hunter2"),
+                ],
+            ),
+        ])
+        .unwrap();
+        assert_eq!(
+            app.backends["eu-west"],
+            Backend::S3 {
+                bucket: "assets".into(),
+                region: None,
+                secret_access_key: "s3cr3t".into(),
+            }
+        );
+        assert_eq!(
+            app.backends["archive"],
+            Backend::Swift {
+                container: "old".into(),
+                password: "hunter2".into(),
+            }
+        );
+        assert_eq!(app.labels["team"], "storage");
+    }
+
+    // r[verify load.layers]
+    // r[verify load.unknown-paths]
+    #[test]
+    fn map_entries_follow_the_secrets_rules() {
+        let Err(ConfigLoadError::Violations(violations)) = try_load::<App>(vec![(
+            ConfigLayer::Public,
+            vec![
+                ("backends.eu-west.type", "s3"),
+                ("backends.eu-west.bucket", "assets"),
+                ("backends.eu-west.secret_access_key", "leaked"),
+                ("backends.eu-west.bucke", "typo"),
+            ],
+        )]) else {
+            panic!("expected violations");
+        };
+        let mismatches = violations
+            .layer_mismatches()
+            .iter()
+            .map(|issue| issue.path.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(mismatches, vec!["backends.eu-west.secret_access_key"]);
+        let unknown = violations
+            .unknown_paths()
+            .iter()
+            .map(|issue| issue.path.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(unknown, vec!["backends.eu-west.bucke"]);
     }
 }

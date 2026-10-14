@@ -104,7 +104,6 @@ version = "0.1.0"
 dependencies = [
  "facet",
  "facet-core",
- "facet-path",
  "facet-value",
  "macros",
 ]

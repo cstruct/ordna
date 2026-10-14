@@ -4,8 +4,10 @@ The core of ordna: config models, schemas, sources, the builder, loading and pro
 
 - **`ConfigModel`**: a config structure, usually implemented with `#[config]` or
   `config_tree!` (re-exported from [macros](../macros)).
-- **`Schema`**: the fields of a model, as `ConfigPath`s such as `db.password`, and each
-  field's layer, public or secret.
+- **`Schema`**: the fields of a model, as path patterns such as `db.password` or
+  `backends.*.bucket` (`*` matches any map key), and each field's layer, public or secret.
+  Structs, maps with scalar keys and internally tagged enums are walked into their
+  fields; everything else, including lists, is a single field.
 - **`ConfigSource`**: provides `FieldCandidate`s, values for config paths, along with a
   detail of where each came from. See the source crates for implementations.
 - **`ConfigBuilder`**: loads a model from sources applied in order, later ones shadowing
@@ -37,9 +39,13 @@ println!("{:?} shadowed {:?}", port.winner(), port.shadowed());
 ## Secrets
 
 Fields marked `#[config(secret)]` (or `#[facet(sensitive)]`) are secret, along with every
-field nested in them. A source may only set fields of its own layer: secret fields only
-from secret sources, public fields only from public sources. Values in violations are
-redacted when either side is secret.
+field nested in them, and so is a list or other single field holding a secret anywhere.
+A source may only set fields of its own layer: secret fields only from secret sources,
+public fields only from public sources. Values in violations are redacted when either side
+is secret.
+
+Map entries merge across sources, so a backend's public fields can come from a public file
+and its credentials from a secrets file.
 
 The package is named `core`, so depend on it as `ordna-core`:
 
