@@ -223,6 +223,20 @@ where
     _error_type: PhantomData<&'facet E>,
 }
 
+impl<'facet, T, P, E> std::fmt::Debug for LoadedConfig<'facet, T, P, E>
+where
+    E: Send + Sync + 'static,
+    T: ConfigModel<'facet, P, E> + std::fmt::Debug,
+    P: SourceFieldPath + std::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LoadedConfig")
+            .field("config", &self.config)
+            .field("sources", &self.sources)
+            .finish()
+    }
+}
+
 impl<'facet, T, P, E> LoadedConfig<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
