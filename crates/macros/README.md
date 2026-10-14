@@ -54,8 +54,9 @@ variants are a compile error.
 
 ## `config_tree!`
 
-Declares nested structs inline. Every struct is expanded as if it had `#[config]`, and
-`#[derive(...)]` attributes are passed on to nested structs.
+Declares nested structs and enums inline, as field types or inside their generic
+arguments. Every declaration is expanded as if it had `#[config]`, and `#[derive(...)]`
+attributes are passed on to nested declarations.
 
 ```rust
 use ordna_core::config_tree;
@@ -70,6 +71,16 @@ config_tree! {
             pub signing_key: String,
             pub ttl_seconds: u32,
         },
+        pub mappings: Vec<pub struct Mapping {
+            pub path_prefix: String,
+        }>,
+        pub backends: HashMap<String, #[facet(tag = "type")] pub enum Backend {
+            S3 {
+                bucket: String,
+                #[config(secret)]
+                secret_access_key: String,
+            },
+        }>,
     }
 }
 ```

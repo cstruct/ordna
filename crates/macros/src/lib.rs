@@ -23,7 +23,7 @@ use quote::{ToTokens, quote};
 use syn::{
     Attribute, Error, Fields, Ident, Item, ItemEnum, ItemStruct, LitStr, Result, Token, Type,
     Visibility, braced,
-    parse::{Parse, ParseStream},
+    parse::{Parse, ParseStream, discouraged::Speculative},
     parse_macro_input,
     punctuated::Punctuated,
 };
@@ -128,7 +128,51 @@ struct ConfigField {
 
 enum FieldType {
     Type(Type),
-    Nested(Box<ConfigStruct>),
+    /// A struct declared as the type.
+    Struct(Box<ConfigStruct>),
+    /// An enum declared as the type.
+    Enum(Box<ItemEnum>),
+    /// A generic type with declarations in its arguments, such as
+    /// `Vec<struct Mapping { .. }>`.
+    Generic {
+        path: TokenStream2,
+        args: Vec<FieldType>,
+    },
+}
+
+impl FieldType {
+    /// The type's tokens, expanding the structs and enums declared in it into `nested`.
+    fn expand(
+        &self,
+        derives: &[Attribute],
+        nested: &mut Vec<TokenStream2>,
+    ) -> Result<TokenStream2> {
+        Ok(match self {
+            FieldType::Type(ty) => ty.to_token_stream(),
+            // r[impl macro.tree]
+            FieldType::Struct(config) => {
+                nested.push(config.expand(derives)?);
+                config.ident.to_token_stream()
+            }
+            // r[impl macro.tree.enums]
+            FieldType::Enum(item) => {
+                let mut item = (**item).clone();
+                item.attrs = derives.iter().chain(&item.attrs).cloned().collect();
+                dedup_attrs(&mut item.attrs);
+                let ident = item.ident.to_token_stream();
+                nested.push(expand_enum(item)?);
+                ident
+            }
+            // r[impl macro.tree.generics]
+            FieldType::Generic { path, args } => {
+                let args = args
+                    .iter()
+                    .map(|arg| arg.expand(derives, nested))
+                    .collect::<Result<Vec<_>>>()?;
+                quote! { #path<#(#args),*> }
+            }
+        })
+    }
 }
 
 impl ConfigStruct {
@@ -192,14 +236,7 @@ impl ConfigStruct {
             let (field_attrs, segment) = field_attrs(&field.attrs)?;
             check_duplicate(&mut segments, &field.ident, segment.as_ref())?;
 
-            let ty = match &field.ty {
-                FieldType::Type(ty) => ty.to_token_stream(),
-                // r[impl macro.tree]
-                FieldType::Nested(config) => {
-                    nested.push(config.expand(&derives)?);
-                    config.ident.to_token_stream()
-                }
-            };
+            let ty = field.ty.expand(&derives, &mut nested)?;
             let ConfigField {
                 vis, ident: name, ..
             } = field;
@@ -425,11 +462,7 @@ impl Parse for ConfigField {
         let vis = input.parse()?;
         let ident = input.parse()?;
         input.parse::<Token![:]>()?;
-        let ty = if is_nested_struct(input) {
-            FieldType::Nested(Box::new(input.parse()?))
-        } else {
-            FieldType::Type(input.parse()?)
-        };
+        let ty = input.parse()?;
         Ok(Self {
             attrs,
             vis,
@@ -439,10 +472,52 @@ impl Parse for ConfigField {
     }
 }
 
-/// Whether the input continues with `[attributes] [visibility] struct`.
-fn is_nested_struct(input: ParseStream) -> bool {
+impl Parse for FieldType {
+    fn parse(input: ParseStream) -> Result<Self> {
+        if is_declaration(input, |fork| fork.peek(Token![struct])) {
+            return Ok(FieldType::Struct(Box::new(input.parse()?)));
+        }
+        if is_declaration(input, |fork| fork.peek(Token![enum])) {
+            return Ok(FieldType::Enum(Box::new(input.parse()?)));
+        }
+        // A plain type, unless declarations in its generic arguments make it fail to parse.
+        let fork = input.fork();
+        if let Ok(ty) = fork.parse::<Type>()
+            && (fork.is_empty() || fork.peek(Token![,]) || fork.peek(Token![>]))
+        {
+            input.advance_to(&fork);
+            return Ok(FieldType::Type(ty));
+        }
+
+        let mut path = TokenStream2::new();
+        if input.peek(Token![::]) {
+            input.parse::<Token![::]>()?.to_tokens(&mut path);
+        }
+        loop {
+            input.parse::<Ident>()?.to_tokens(&mut path);
+            if !input.peek(Token![::]) {
+                break;
+            }
+            input.parse::<Token![::]>()?.to_tokens(&mut path);
+        }
+        input.parse::<Token![<]>()?;
+        let mut args = vec![input.parse()?];
+        while input.peek(Token![,]) {
+            input.parse::<Token![,]>()?;
+            if input.peek(Token![>]) {
+                break;
+            }
+            args.push(input.parse()?);
+        }
+        input.parse::<Token![>]>()?;
+        Ok(FieldType::Generic { path, args })
+    }
+}
+
+/// Whether the input continues with `[attributes] [visibility]` and then `keyword`.
+fn is_declaration(input: ParseStream, keyword: impl FnOnce(ParseStream) -> bool) -> bool {
     let fork = input.fork();
     fork.call(Attribute::parse_outer).is_ok()
         && fork.parse::<Visibility>().is_ok()
-        && fork.peek(Token![struct])
+        && keyword(&fork)
 }

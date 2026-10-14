@@ -438,3 +438,81 @@ mod maps {
         assert_eq!(unknown, vec!["backends.eu-west.bucke"]);
     }
 }
+
+mod tree_generics {
+    use std::collections::HashMap;
+
+    use super::*;
+
+    config_tree! {
+        #[derive(Debug, PartialEq)]
+        pub struct App {
+            pub mappings: Vec<pub struct Mapping {
+                pub path_prefix: String,
+            }>,
+            pub backends: HashMap<String, #[facet(tag = "type", rename_all = "snake_case")] pub enum Backend {
+                S3 {
+                    bucket: String,
+                    #[config(secret, path = "secret")]
+                    secret_access_key: String,
+                },
+                Local,
+            }>,
+        }
+    }
+
+    // r[verify macro.tree.generics]
+    // r[verify macro.tree.derives]
+    // r[verify macro.tree.enums]
+    #[test]
+    fn declarations_in_generic_arguments() {
+        let schema = <App as ConfigModel<'static, NoPath, String>>::schema();
+        let fields = schema
+            .fields()
+            .iter()
+            .map(|(pattern, layer)| (pattern.to_string(), *layer))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            fields,
+            vec![
+                ("backends.*.bucket".into(), ConfigLayer::Public),
+                ("backends.*.secret".into(), ConfigLayer::Secret),
+                ("backends.*.type".into(), ConfigLayer::Public),
+                ("mappings".into(), ConfigLayer::Public),
+            ]
+        );
+
+        let app = try_load::<App>(vec![
+            (
+                ConfigLayer::Public,
+                vec![
+                    ("backends.a.type", "s3"),
+                    ("backends.a.bucket", "assets"),
+                    ("backends.b.type", "local"),
+                ],
+            ),
+            (ConfigLayer::Secret, vec![("backends.a.secret", "s3cr3t")]),
+        ])
+        .unwrap();
+        // The derives were passed on to the nested declarations.
+        assert_eq!(
+            app,
+            App {
+                mappings: Vec::new(),
+                backends: HashMap::from([
+                    (
+                        "a".into(),
+                        Backend::S3 {
+                            bucket: "assets".into(),
+                            secret_access_key: "s3cr3t".into(),
+                        }
+                    ),
+                    ("b".into(), Backend::Local),
+                ]),
+            }
+        );
+        let _ = Mapping {
+            path_prefix: "/".into(),
+        };
+    }
+}

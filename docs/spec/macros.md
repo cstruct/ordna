@@ -14,8 +14,16 @@ r[macro.tree]
 struct as if it had `#[config]`, with nested structs as their own types.
 
 r[macro.tree.derives]
-`config_tree!` MUST pass a struct's `#[derive(...)]` attributes on to the structs nested
-in it.
+`config_tree!` MUST pass a struct's `#[derive(...)]` attributes on to the structs and enums
+nested in it.
+
+r[macro.tree.enums]
+`config_tree!` MUST accept enum declarations as field types and expand them as if they had
+`#[config]`.
+
+r[macro.tree.generics]
+`config_tree!` MUST accept struct and enum declarations inside the generic arguments of a
+field type, such as `Vec<struct Mapping { .. }>` or `HashMap<String, enum Backend { .. }>`.
 
 r[macro.enum]
 `#[config]` on an enum MUST derive `Facet` for it, giving it a `#[repr(C)]` representation
