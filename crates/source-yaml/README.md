@@ -1,9 +1,9 @@
-# source-yaml
+# ordna-source-yaml
 
 Loads ordna config values from YAML files, using [facet-yaml](https://crates.io/crates/facet-yaml).
 
 ```rust
-use source_yaml::yaml_file;
+use ordna_source_yaml::yaml_file;
 
 let defaults = yaml_file("config.yaml");
 let secrets = yaml_file("secrets.yaml").optional().secrets();

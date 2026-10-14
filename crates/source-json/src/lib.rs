@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 
 use facet_value::Value;
-use source_file::{FileFormat, FileSource};
+use ordna_source_file::{FileFormat, FileSource};
 
 pub use facet_json::DeserializeError;
 
@@ -44,7 +44,7 @@ mod tests {
     use facet::Facet;
     use facet_value::from_value;
     use ordna_core::{ConfigSource, Schema};
-    use source_file::FileSourceError;
+    use ordna_source_file::FileSourceError;
 
     use super::json_file;
 

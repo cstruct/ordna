@@ -1,12 +1,12 @@
-# source-file
+# ordna-source-file
 
 A generic ordna config source for files in any format. Format crates such as
-[source-styx](../source-styx), [source-json](../source-json),
-[source-toml](../source-toml) and [source-yaml](../source-yaml) build on it.
+[ordna-source-styx](../source-styx), [ordna-source-json](../source-json),
+[ordna-source-toml](../source-toml) and [ordna-source-yaml](../source-yaml) build on it.
 
 ```rust
-use source_file::FileSource;
-use source_toml::Toml;
+use ordna_source_file::FileSource;
+use ordna_source_toml::Toml;
 
 let defaults = FileSource::new("config.toml", Toml);
 let secrets = FileSource::new("secrets.toml", Toml).optional().secrets();

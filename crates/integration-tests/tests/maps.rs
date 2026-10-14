@@ -9,9 +9,9 @@ use common::{AppError, Origin, TempDir, path};
 use ordna_core::{
     ConfigBuilder, ConfigLoadError, ConfigValueSource, SourceRegistration, config, config_tree,
 };
-use source_env::{EnvSource, EnvVarDetail};
-use source_file::{FileFormat, FileSource, FileValueDetail};
-use source_yaml::{DeserializeError, yaml_file};
+use ordna_source_env::{EnvSource, EnvVarDetail};
+use ordna_source_file::{FileFormat, FileSource, FileValueDetail};
+use ordna_source_yaml::{DeserializeError, yaml_file};
 
 #[config]
 #[derive(Debug, PartialEq)]

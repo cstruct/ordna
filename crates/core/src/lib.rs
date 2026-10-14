@@ -26,7 +26,7 @@ pub use source::{
     SourceMeta,
 };
 
-pub use macros::{config, config_tree};
+pub use ordna_macros::{config, config_tree};
 
 #[doc(hidden)]
 pub mod __private {

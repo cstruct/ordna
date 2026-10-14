@@ -1,9 +1,9 @@
-# source-env
+# ordna-source-env
 
 Loads ordna config values from environment variables.
 
 ```rust
-use source_env::EnvSource;
+use ordna_source_env::EnvSource;
 
 // Reads APP__NAME, APP__JWT__TTL_SECONDS, ...
 let env = EnvSource::with_prefix("APP");

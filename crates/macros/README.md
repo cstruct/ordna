@@ -1,4 +1,4 @@
-# macros
+# ordna-macros
 
 Macros for declaring ordna config models. Use them through `ordna_core`, which re-exports
 them.

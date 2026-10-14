@@ -1,9 +1,9 @@
-# source-toml
+# ordna-source-toml
 
 Loads ordna config values from TOML files, using [facet-toml](https://crates.io/crates/facet-toml).
 
 ```rust
-use source_toml::toml_file;
+use ordna_source_toml::toml_file;
 
 let defaults = toml_file("config.toml");
 let secrets = toml_file("secrets.toml").optional().secrets();

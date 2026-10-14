@@ -3,7 +3,7 @@ use std::{borrow::Cow, fmt};
 /// Validated dotted config path such as `jwt.ttl_seconds`.
 ///
 /// ```rust
-/// use ::core::ConfigPath;
+/// use ordna_core::ConfigPath;
 ///
 /// let path = ConfigPath::parse("jwt.ttl_seconds").unwrap();
 /// assert_eq!(path.to_string(), "jwt.ttl_seconds");

@@ -6,12 +6,12 @@ use std::path::PathBuf;
 
 use common::*;
 use ordna_core::{ConfigBuilder, ConfigValueSource};
-use source_env::EnvSource;
-use source_file::{FileFormat, FileSource};
-use source_json::{Json, json_file};
-use source_styx::{Styx, styx_file};
-use source_toml::{Toml, toml_file};
-use source_yaml::{Yaml, yaml_file};
+use ordna_source_env::EnvSource;
+use ordna_source_file::{FileFormat, FileSource};
+use ordna_source_json::{Json, json_file};
+use ordna_source_styx::{Styx, styx_file};
+use ordna_source_toml::{Toml, toml_file};
+use ordna_source_yaml::{Yaml, yaml_file};
 
 /// [`DEFAULTS`] and [`SECRETS`] in each format.
 const JSON_DEFAULTS: &str = r#"{
@@ -75,7 +75,7 @@ const ENV: [(&str, &str); 3] = [
 /// and provenance.
 fn check_format<F>(name: &str, defaults: &str, secrets: &str, open: fn(PathBuf) -> FileSource<F>)
 where
-    F: FileFormat<Error = source_styx::DeserializeError>,
+    F: FileFormat<Error = ordna_source_styx::DeserializeError>,
 {
     let dir = TempDir::new(&format!("format-{name}"));
     let defaults = dir.write(&format!("defaults.{name}"), defaults);

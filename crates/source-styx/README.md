@@ -1,9 +1,9 @@
-# source-styx
+# ordna-source-styx
 
 Loads ordna config values from [Styx](https://github.com/bearcove/styx) files, using [facet-styx](https://crates.io/crates/facet-styx).
 
 ```rust
-use source_styx::styx_file;
+use ordna_source_styx::styx_file;
 
 let defaults = styx_file("config.styx");
 let secrets = styx_file("secrets.styx").optional().secrets();

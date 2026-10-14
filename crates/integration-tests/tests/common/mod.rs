@@ -8,9 +8,9 @@ use ordna_core::{
     ConfigBuilder, ConfigLoadError, ConfigModel, ConfigPath, LoadedConfig, SourceFieldPath,
     SourceRegistration, config_tree,
 };
-use source_env::{EnvSource, EnvSourceError, EnvVarDetail};
-use source_file::{FileFormat, FileSource, FileSourceError, FileValueDetail};
-use source_styx::{DeserializeError, styx_file};
+use ordna_source_env::{EnvSource, EnvSourceError, EnvVarDetail};
+use ordna_source_file::{FileFormat, FileSource, FileSourceError, FileValueDetail};
+use ordna_source_styx::{DeserializeError, styx_file};
 
 config_tree! {
     #[derive(Debug, PartialEq)]

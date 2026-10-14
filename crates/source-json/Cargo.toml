@@ -1,14 +1,20 @@
 [package]
-name = "source-json"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.90"
+name = "ordna-source-json"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "JSON config files for ordna"
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
-source-file = { path = "../source-file" }
+ordna-source-file = { path = "../source-file", version = "0.1.0" }
 facet-json = "0.46.1"
 facet-value = "0.46.0"
 
 [dev-dependencies]
-ordna-core = { package = "core", path = "../core" }
+ordna-core = { path = "../core" }
 facet = "0.46.5"

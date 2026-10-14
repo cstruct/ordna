@@ -1,11 +1,17 @@
 [package]
-name = "source-env"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.90"
+name = "ordna-source-env"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Environment variable config source for ordna"
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
-ordna-core = { package = "core", path = "../core" }
+ordna-core = { path = "../core", version = "0.1.0" }
 facet-value = "0.46.0"
 
 [dev-dependencies]

@@ -1,9 +1,9 @@
-# core
+# ordna-core
 
 The core of ordna: config models, schemas, sources, the builder, loading and provenance.
 
 - **`ConfigModel`**: a config structure, usually implemented with `#[config]` or
-  `config_tree!` (re-exported from [macros](../macros)).
+  `config_tree!` (re-exported from [ordna-macros](../macros)).
 - **`Schema`**: the fields of a model, as path patterns such as `db.password` or
   `backends.*.bucket` (`*` matches any map key), and each field's layer, public or secret.
   Structs, maps with scalar keys and internally tagged enums are walked into their
@@ -47,8 +47,7 @@ is secret.
 Map entries merge across sources, so a backend's public fields can come from a public file
 and its credentials from a secrets file.
 
-The package is named `core`, so depend on it as `ordna-core`:
-
 ```toml
-ordna-core = { package = "core", path = "../core" }
+[dependencies]
+ordna-core = "0.1"
 ```

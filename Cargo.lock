@@ -99,16 +99,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32b13ea120a812beba79e34316b3942a857c86ec1593cb34f27bb28272ce2cca"
 
 [[package]]
-name = "core"
-version = "0.1.0"
-dependencies = [
- "facet",
- "facet-core",
- "facet-value",
- "macros",
-]
-
-[[package]]
 name = "countme"
 version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -424,14 +414,14 @@ dependencies = [
 name = "integration-tests"
 version = "0.1.0"
 dependencies = [
- "core",
  "facet",
- "source-env",
- "source-file",
- "source-json",
- "source-styx",
- "source-toml",
- "source-yaml",
+ "ordna-core",
+ "ordna-source-env",
+ "ordna-source-file",
+ "ordna-source-json",
+ "ordna-source-styx",
+ "ordna-source-toml",
+ "ordna-source-yaml",
  "trybuild",
 ]
 
@@ -452,15 +442,6 @@ name = "libc"
 version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
-
-[[package]]
-name = "macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.9",
-]
 
 [[package]]
 name = "memchr"
@@ -506,6 +487,87 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "ordna-core"
+version = "0.1.0"
+dependencies = [
+ "facet",
+ "facet-core",
+ "facet-value",
+ "ordna-macros",
+]
+
+[[package]]
+name = "ordna-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.9",
+]
+
+[[package]]
+name = "ordna-source-env"
+version = "0.1.0"
+dependencies = [
+ "facet",
+ "facet-value",
+ "ordna-core",
+]
+
+[[package]]
+name = "ordna-source-file"
+version = "0.1.0"
+dependencies = [
+ "facet",
+ "facet-value",
+ "ordna-core",
+]
+
+[[package]]
+name = "ordna-source-json"
+version = "0.1.0"
+dependencies = [
+ "facet",
+ "facet-json",
+ "facet-value",
+ "ordna-core",
+ "ordna-source-file",
+]
+
+[[package]]
+name = "ordna-source-styx"
+version = "0.1.0"
+dependencies = [
+ "facet",
+ "facet-styx",
+ "facet-value",
+ "ordna-core",
+ "ordna-source-file",
+]
+
+[[package]]
+name = "ordna-source-toml"
+version = "0.1.0"
+dependencies = [
+ "facet",
+ "facet-toml",
+ "facet-value",
+ "ordna-core",
+ "ordna-source-file",
+]
+
+[[package]]
+name = "ordna-source-yaml"
+version = "0.1.0"
+dependencies = [
+ "facet",
+ "facet-value",
+ "facet-yaml",
+ "ordna-core",
+ "ordna-source-file",
+]
 
 [[package]]
 name = "pin-project-lite"
@@ -665,68 +727,6 @@ name = "smallvec"
 version = "2.0.0-beta.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ea3c9b717472722a7bf1def25b976350fc5d2f57bd710e83d96de1f211e035cf"
-
-[[package]]
-name = "source-env"
-version = "0.1.0"
-dependencies = [
- "core",
- "facet",
- "facet-value",
-]
-
-[[package]]
-name = "source-file"
-version = "0.1.0"
-dependencies = [
- "core",
- "facet",
- "facet-value",
-]
-
-[[package]]
-name = "source-json"
-version = "0.1.0"
-dependencies = [
- "core",
- "facet",
- "facet-json",
- "facet-value",
- "source-file",
-]
-
-[[package]]
-name = "source-styx"
-version = "0.1.0"
-dependencies = [
- "core",
- "facet",
- "facet-styx",
- "facet-value",
- "source-file",
-]
-
-[[package]]
-name = "source-toml"
-version = "0.1.0"
-dependencies = [
- "core",
- "facet",
- "facet-toml",
- "facet-value",
- "source-file",
-]
-
-[[package]]
-name = "source-yaml"
-version = "0.1.0"
-dependencies = [
- "core",
- "facet",
- "facet-value",
- "facet-yaml",
- "source-file",
-]
 
 [[package]]
 name = "strsim"

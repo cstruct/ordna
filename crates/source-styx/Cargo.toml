@@ -1,12 +1,18 @@
 [package]
-name = "source-styx"
-version = "0.1.0"
-edition = "2024"
-rust-version = "1.90"
+name = "ordna-source-styx"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Styx config files for ordna"
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
-ordna-core = { package = "core", path = "../core" }
-source-file = { path = "../source-file" }
+ordna-core = { path = "../core", version = "0.1.0" }
+ordna-source-file = { path = "../source-file", version = "0.1.0" }
 facet-styx = "4.0.0"
 facet-value = "0.46.0"
 

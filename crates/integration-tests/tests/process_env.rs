@@ -7,7 +7,7 @@ mod common;
 
 use common::*;
 use ordna_core::ConfigValueSource;
-use source_env::EnvSource;
+use ordna_source_env::EnvSource;
 
 // r[verify env.naming]
 // r[verify env.values]

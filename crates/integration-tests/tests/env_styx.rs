@@ -8,7 +8,7 @@ use ordna_core::{
     ConfigLayer, ConfigLoadError, ConfigValueSource, ConfigViolations, DiagnosticValue,
     SourceFieldPath,
 };
-use source_env::EnvSource;
+use ordna_source_env::EnvSource;
 
 const ENV: [(&str, &str); 4] = [
     ("APP__PORT", "9090"),
@@ -265,6 +265,6 @@ fn source_errors_name_the_failing_source() {
     assert_eq!(error.source.name.as_deref(), Some("defaults"));
     assert!(matches!(
         error.error,
-        AppError::File(source_file::FileSourceError::Io { .. })
+        AppError::File(ordna_source_file::FileSourceError::Io { .. })
     ));
 }

@@ -21,9 +21,9 @@ environment variables, and find out where every value came from.
 use std::path::PathBuf;
 
 use ordna_core::{ConfigBuilder, ConfigLoadError, ConfigPath, SourceFieldPath, config_tree};
-use source_env::{EnvSource, EnvSourceError, EnvVarDetail};
-use source_file::{FileSourceError, FileValueDetail};
-use source_styx::{DeserializeError, styx_file};
+use ordna_source_env::{EnvSource, EnvSourceError, EnvVarDetail};
+use ordna_source_file::{FileSourceError, FileValueDetail};
+use ordna_source_styx::{DeserializeError, styx_file};
 
 config_tree! {
     #[derive(Debug)]
@@ -101,22 +101,23 @@ db {
 
 | Crate | |
 |---|---|
-| [core](crates/core) | Config models, schemas, the builder, loading and provenance |
-| [macros](crates/macros) | `#[config]` and `config_tree!`, re-exported by `core` |
-| [source-env](crates/source-env) | Environment variables |
-| [source-file](crates/source-file) | Generic file source for any `FileFormat` |
-| [source-styx](crates/source-styx) | [Styx](https://github.com/bearcove/styx) files |
-| [source-json](crates/source-json) | JSON files |
-| [source-toml](crates/source-toml) | TOML files |
-| [source-yaml](crates/source-yaml) | YAML files |
+| [ordna-core](crates/core) | Config models, schemas, the builder, loading and provenance |
+| [ordna-macros](crates/macros) | `#[config]` and `config_tree!`, re-exported by `ordna-core` |
+| [ordna-source-env](crates/source-env) | Environment variables |
+| [ordna-source-file](crates/source-file) | Generic file source for any `FileFormat` |
+| [ordna-source-styx](crates/source-styx) | [Styx](https://github.com/bearcove/styx) files |
+| [ordna-source-json](crates/source-json) | JSON files |
+| [ordna-source-toml](crates/source-toml) | TOML files |
+| [ordna-source-yaml](crates/source-yaml) | YAML files |
 | [integration-tests](crates/integration-tests) | End-to-end tests across the crates |
 
-The core package is named `core`, which clashes with Rust's built-in `core` crate, so
-depend on it under another name. The macros expect `ordna-core`:
+Depend on `ordna-core` plus the source crates you need:
 
 ```toml
 [dependencies]
-ordna-core = { package = "core", path = "crates/core" }
+ordna-core = "0.1"
+ordna-source-env = "0.1"
+ordna-source-styx = "0.1"
 # Needed when using `#[config(path = "...")]`, see crates/macros.
 facet = "0.46.5"
 ```

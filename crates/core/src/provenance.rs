@@ -18,7 +18,7 @@ pub enum NoDerivedKind {}
 /// ```rust
 /// use std::path::PathBuf;
 ///
-/// use ::core::{ConfigPath, ConfigValueSource, SourceFieldPath};
+/// use ordna_core::{ConfigPath, ConfigValueSource, SourceFieldPath};
 ///
 /// enum Origin {
 ///     File { file: PathBuf, path: ConfigPath },
@@ -44,7 +44,7 @@ pub enum NoDerivedKind {}
 ///
 /// ```rust
 /// # use std::path::PathBuf;
-/// # use ::core::{ConfigPath, ConfigValueSource, SourceFieldPath};
+/// # use ordna_core::{ConfigPath, ConfigValueSource, SourceFieldPath};
 /// # struct Origin { file: PathBuf, path: ConfigPath }
 /// # impl SourceFieldPath for Origin {
 /// #     fn field_path(&self) -> &ConfigPath {

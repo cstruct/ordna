@@ -1,9 +1,9 @@
-# source-json
+# ordna-source-json
 
 Loads ordna config values from JSON files, using [facet-json](https://crates.io/crates/facet-json).
 
 ```rust
-use source_json::json_file;
+use ordna_source_json::json_file;
 
 let defaults = json_file("config.json");
 let secrets = json_file("secrets.json").optional().secrets();
