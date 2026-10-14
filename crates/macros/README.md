@@ -28,6 +28,30 @@ pub struct Jwt {
 }
 ```
 
+On an enum, `#[config]` derives `Facet` (adding `#[repr(C)]` unless it has a `repr`) and
+handles the field attributes of its struct variants. Tag it with `#[facet(tag = "...")]`
+to have its variants' fields walked as config fields:
+
+```rust
+#[config]
+#[facet(tag = "type", rename_all = "snake_case")]
+pub enum Backend {
+    S3 {
+        bucket: String,
+        #[config(secret)]
+        secret_access_key: String,
+    },
+    Swift {
+        container: String,
+        #[config(secret)]
+        password: String,
+    },
+}
+```
+
+facet only supports struct and unit variants for internally tagged enums, so tuple
+variants are a compile error.
+
 ## `config_tree!`
 
 Declares nested structs inline. Every struct is expanded as if it had `#[config]`, and
@@ -58,5 +82,6 @@ config_tree! {
 
 Invalid paths, duplicate paths, unknown attributes and generic structs are compile errors.
 
-Crates using `#[config(path = "...")]` must depend on `facet` directly: facet expands the
-`rename` it maps to through a macro that always refers to `::facet`.
+Crates using `#[config(path = "...")]` or facet attributes such as `tag` must depend on
+`facet` directly: facet expands those attributes through a macro that always refers to
+`::facet`.

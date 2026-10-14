@@ -1,6 +1,7 @@
 //! Macros for declaring config structures.
 //!
-//! - [`macro@config`] turns a normal struct into a config struct.
+//! - [`macro@config`] turns a normal struct into a config struct, or an enum into one
+//!   usable in config structs.
 //! - [`config_tree!`] declares a config structure with nested structs inline.
 //!
 //! In both, field attributes configure fields:
@@ -20,7 +21,8 @@ use proc_macro::TokenStream;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{ToTokens, quote};
 use syn::{
-    Attribute, Error, Fields, Ident, ItemStruct, LitStr, Result, Token, Type, Visibility, braced,
+    Attribute, Error, Fields, Ident, Item, ItemEnum, ItemStruct, LitStr, Result, Token, Type,
+    Visibility, braced,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
@@ -46,6 +48,23 @@ use syn::{
 ///     ttl_seconds: u32,
 /// }
 /// ```
+///
+/// On an enum, derives `Facet` and handles the field attributes of its struct variants.
+/// Tag the enum with `#[facet(tag = "...")]` to have its variants' fields walked as config
+/// fields; facet only supports struct and unit variants for internally tagged enums.
+///
+/// ```ignore
+/// #[config]
+/// #[facet(tag = "type", rename_all = "snake_case")]
+/// #[repr(C)]
+/// enum Backend {
+///     S3 {
+///         bucket: String,
+///         #[config(secret)]
+///         secret_access_key: String,
+///     },
+/// }
+/// ```
 #[proc_macro_attribute]
 pub fn config(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = TokenStream2::from(args);
@@ -54,11 +73,15 @@ pub fn config(args: TokenStream, input: TokenStream) -> TokenStream {
             .into_compile_error()
             .into();
     }
-    let item = parse_macro_input!(input as ItemStruct);
-    ConfigStruct::from_item(item)
-        .and_then(|config| config.expand(&[]))
-        .unwrap_or_else(Error::into_compile_error)
-        .into()
+    let result = match parse_macro_input!(input as Item) {
+        Item::Struct(item) => ConfigStruct::from_item(item).and_then(|config| config.expand(&[])),
+        Item::Enum(item) => expand_enum(item),
+        item => Err(Error::new_spanned(
+            item,
+            "`#[config]` is only supported on structs and enums",
+        )),
+    };
+    result.unwrap_or_else(Error::into_compile_error).into()
 }
 
 // r[impl macro.tree]
@@ -166,17 +189,8 @@ impl ConfigStruct {
         let mut segments = BTreeMap::<String, Span>::new();
         let mut field_tokens = Vec::new();
         for field in fields {
-            let (field_attrs, segment) = field_attrs(field)?;
-            let (name, span) = match segment {
-                Some(segment) => (segment.value(), segment.span()),
-                None => (unraw(&field.ident), field.ident.span()),
-            };
-            // r[impl macro.error.duplicate-path]
-            if let Some(previous) = segments.insert(name.clone(), span) {
-                let mut error = Error::new(span, format!("duplicate config path `{name}`"));
-                error.combine(Error::new(previous, "previously used here"));
-                return Err(error);
-            }
+            let (field_attrs, segment) = field_attrs(&field.attrs)?;
+            check_duplicate(&mut segments, &field.ident, segment.as_ref())?;
 
             let ty = match &field.ty {
                 FieldType::Type(ty) => ty.to_token_stream(),
@@ -219,14 +233,74 @@ impl ConfigStruct {
     }
 }
 
+// r[impl macro.enum]
+fn expand_enum(mut item: ItemEnum) -> Result<TokenStream2> {
+    if !item.generics.params.is_empty() || item.generics.where_clause.is_some() {
+        return Err(Error::new_spanned(
+            item.generics,
+            "config enums can't be generic",
+        ));
+    }
+    reject_config_attrs(&item.attrs)?;
+    for variant in &mut item.variants {
+        reject_config_attrs(&variant.attrs)?;
+        match &mut variant.fields {
+            Fields::Named(fields) => {
+                let mut segments = BTreeMap::new();
+                for field in &mut fields.named {
+                    let (attrs, segment) = field_attrs(&field.attrs)?;
+                    let ident = field.ident.as_ref().expect("named fields have identifiers");
+                    check_duplicate(&mut segments, ident, segment.as_ref())?;
+                    field.attrs = attrs;
+                }
+            }
+            Fields::Unit => {}
+            Fields::Unnamed(fields) => {
+                return Err(Error::new_spanned(
+                    fields,
+                    "config enum variants must be struct or unit variants",
+                ));
+            }
+        }
+    }
+    // facet requires an explicit representation for enums.
+    let repr = (!item.attrs.iter().any(|attr| attr.path().is_ident("repr")))
+        .then(|| quote! { #[repr(C)] });
+    Ok(quote! {
+        #[derive(::ordna_core::__private::facet::Facet)]
+        #[facet(crate = ::ordna_core::__private::facet)]
+        #repr
+        #item
+    })
+}
+
+// r[impl macro.error.duplicate-path]
+/// Records the config path segment of a field, failing if another field already uses it.
+fn check_duplicate(
+    segments: &mut BTreeMap<String, Span>,
+    ident: &Ident,
+    segment: Option<&LitStr>,
+) -> Result<()> {
+    let (name, span) = match segment {
+        Some(segment) => (segment.value(), segment.span()),
+        None => (unraw(ident), ident.span()),
+    };
+    if let Some(previous) = segments.insert(name.clone(), span) {
+        let mut error = Error::new(span, format!("duplicate config path `{name}`"));
+        error.combine(Error::new(previous, "previously used here"));
+        return Err(error);
+    }
+    Ok(())
+}
+
 // r[impl macro.error.attributes]
 /// Field attributes with `#[config(...)]` replaced by the matching facet attributes, and
 /// the overridden path segment, if any.
-fn field_attrs(field: &ConfigField) -> Result<(Vec<Attribute>, Option<LitStr>)> {
+fn field_attrs(field_attrs: &[Attribute]) -> Result<(Vec<Attribute>, Option<LitStr>)> {
     let mut attrs = Vec::new();
     let mut segment = None::<LitStr>;
     let mut secret = false;
-    for attr in &field.attrs {
+    for attr in field_attrs {
         if !attr.path().is_ident("config") {
             if attr.path().is_ident("facet") && has_facet_rename(attr) {
                 return Err(Error::new_spanned(

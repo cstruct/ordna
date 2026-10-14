@@ -17,6 +17,10 @@ r[macro.tree.derives]
 `config_tree!` MUST pass a struct's `#[derive(...)]` attributes on to the structs nested
 in it.
 
+r[macro.enum]
+`#[config]` on an enum MUST derive `Facet` for it, giving it a `#[repr(C)]` representation
+unless it has one, and handle the field attributes of its struct variants.
+
 r[macro.raw-idents]
 A field named with a raw identifier MUST use the name without the `r#` prefix as its
 config path segment.
@@ -43,4 +47,5 @@ Unknown `config` attributes, duplicate `config` attributes, `#[config(...)]` on 
 `#[facet(rename)]` on fields MUST be compile errors.
 
 r[macro.error.shape]
-Generic structs and structs without named fields MUST be compile errors.
+Generic structs and enums, structs without named fields and enum variants that are neither
+struct nor unit variants MUST be compile errors.

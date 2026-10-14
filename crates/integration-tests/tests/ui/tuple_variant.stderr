@@ -1,0 +1,5 @@
+error: config enum variants must be struct or unit variants
+ --> tests/ui/tuple_variant.rs:6:7
+  |
+6 |     S3(String),
+  |       ^^^^^^^^
