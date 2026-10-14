@@ -14,7 +14,9 @@ pub use builder::{ConfigBuilder, LoadedConfig};
 pub use error::{ConfigLoadError, ConfigViolations, DecodeError, SourceLoadError};
 pub use issue::{ConflictIssue, DiagnosticValue, LayerMismatchIssue, UnknownPathIssue};
 pub use model::ConfigModel;
-pub use path::{ConfigPath, ConfigPathSegment, InvalidPathSegment};
+pub use path::{
+    ConfigPath, ConfigPathPattern, ConfigPathSegment, ConfigPathSegmentPattern, InvalidPathSegment,
+};
 pub use provenance::{ConfigValueSource, SourceResolution};
 pub use schema::Schema;
 pub use source::field_candidate::SourceValueDetail;

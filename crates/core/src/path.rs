@@ -61,6 +61,97 @@ impl fmt::Display for ConfigPath {
     }
 }
 
+// r[impl path.pattern]
+/// A config path where segments may be dynamic, matching any segment, such as
+/// `backends.*.bucket` for the `bucket` field of every entry of the `backends` map.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ConfigPathPattern {
+    segments: Vec<ConfigPathSegmentPattern>,
+}
+
+impl ConfigPathPattern {
+    /// Creates a pattern from its segments.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `segments` is empty.
+    pub fn new(segments: Vec<ConfigPathSegmentPattern>) -> Self {
+        assert!(
+            !segments.is_empty(),
+            "Patterns must have at least one segment"
+        );
+        Self { segments }
+    }
+
+    pub fn segments(&self) -> &[ConfigPathSegmentPattern] {
+        &self.segments
+    }
+
+    /// Whether `path` matches this pattern.
+    pub fn matches(&self, path: &ConfigPath) -> bool {
+        path.segments.len() == self.segments.len() && self.matches_start(&path.segments)
+    }
+
+    /// Whether `segments` match the start of this pattern without matching all of it,
+    /// i.e. lead towards paths matching it.
+    pub fn leads_to(&self, segments: &[ConfigPathSegment]) -> bool {
+        segments.len() < self.segments.len() && self.matches_start(segments)
+    }
+
+    /// The path this pattern matches, if it has no dynamic segments.
+    pub fn as_static(&self) -> Option<ConfigPath> {
+        let segments = self
+            .segments
+            .iter()
+            .map(|segment| match segment {
+                ConfigPathSegmentPattern::Static(segment) => Some(segment.clone()),
+                ConfigPathSegmentPattern::Dynamic => None,
+            })
+            .collect::<Option<_>>()?;
+        Some(ConfigPath { segments })
+    }
+
+    fn matches_start(&self, segments: &[ConfigPathSegment]) -> bool {
+        self.segments
+            .iter()
+            .zip(segments)
+            .all(|(pattern, segment)| match pattern {
+                ConfigPathSegmentPattern::Static(expected) => expected == segment,
+                ConfigPathSegmentPattern::Dynamic => true,
+            })
+    }
+}
+
+impl fmt::Display for ConfigPathPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, segment) in self.segments.iter().enumerate() {
+            if i > 0 {
+                write!(f, ".")?;
+            }
+            write!(f, "{segment}")?;
+        }
+        Ok(())
+    }
+}
+
+/// One segment of a [`ConfigPathPattern`].
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ConfigPathSegmentPattern {
+    /// Matches exactly this segment, such as a struct field name.
+    Static(ConfigPathSegment),
+    /// Matches any segment, such as a map key. Displayed as `*`.
+    Dynamic,
+}
+
+impl fmt::Display for ConfigPathSegmentPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Static(segment) => segment.fmt(f),
+            Self::Dynamic => write!(f, "*"),
+        }
+    }
+}
+
 /// One segment of a [`ConfigPath`], such as `jwt` or `ttl_seconds`.
 ///
 /// A segment is a struct field name or a map key, and contains only ASCII alphanumerics,
@@ -145,7 +236,10 @@ impl fmt::Display for ConfigPathSegment {
 
 #[cfg(test)]
 mod tests {
-    use super::{ConfigPath, ConfigPathSegment, InvalidPathSegment};
+    use super::{
+        ConfigPath, ConfigPathPattern, ConfigPathSegment, ConfigPathSegmentPattern,
+        InvalidPathSegment,
+    };
 
     // r[verify path.segment.syntax]
     // r[verify path.segment.dynamic]
@@ -172,6 +266,25 @@ mod tests {
     fn invalid_static_segments_panic() {
         let name = "a.b";
         ConfigPathSegment::new(name);
+    }
+
+    // r[verify path.pattern]
+    #[test]
+    fn patterns_match_any_segment_where_dynamic() {
+        let pattern = ConfigPathPattern::new(vec![
+            ConfigPathSegmentPattern::Static(ConfigPathSegment::new("backends")),
+            ConfigPathSegmentPattern::Dynamic,
+            ConfigPathSegmentPattern::Static(ConfigPathSegment::new("bucket")),
+        ]);
+        let path = |path: &str| ConfigPath::parse(path).unwrap();
+        assert_eq!(pattern.to_string(), "backends.*.bucket");
+        assert!(pattern.matches(&path("backends.eu-west.bucket")));
+        assert!(!pattern.matches(&path("backends.eu-west")));
+        assert!(!pattern.matches(&path("backends.eu-west.bucket.x")));
+        assert!(!pattern.matches(&path("other.eu-west.bucket")));
+        assert!(pattern.leads_to(path("backends.eu-west").segments()));
+        assert!(!pattern.leads_to(path("backends.eu-west.bucket").segments()));
+        assert_eq!(pattern.as_static(), None);
     }
 
     // r[verify path.non-empty]

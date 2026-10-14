@@ -26,3 +26,10 @@ r[path.dotted]
 A config path MUST be displayed as its segments joined by `.`, and parsing that dotted
 form MUST produce the same path. Parsing MUST fail if any segment is invalid, including
 empty segments.
+
+## Patterns
+
+r[path.pattern]
+A config path pattern MUST consist of static segments, matching exactly that segment, and
+dynamic segments, matching any segment, displayed as `*`. A path matches a pattern when it
+has as many segments and each matches.
