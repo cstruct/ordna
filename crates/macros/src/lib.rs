@@ -303,20 +303,19 @@ fn dedup_attrs(attrs: &mut Vec<Attribute>) {
 fn validate_segment(segment: &LitStr) -> Result<()> {
     let value = segment.value();
     let error = |message| Err(Error::new(segment.span(), message));
-    let Some(first) = value.chars().next() else {
+    if value.is_empty() {
         return error("config path segments must not be empty");
-    };
+    }
     if value.contains('.') {
         return error("config paths override a single segment and must not contain `.`");
     }
-    if !(first.is_ascii_alphabetic() || first == '_') {
-        return error("config path segments must start with an ASCII letter or underscore");
-    }
     if !value
         .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
     {
-        return error("config path segments may only contain ASCII alphanumerics and underscores");
+        return error(
+            "config path segments may only contain ASCII alphanumerics, underscores and hyphens",
+        );
     }
     Ok(())
 }

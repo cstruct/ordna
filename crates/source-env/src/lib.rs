@@ -358,12 +358,12 @@ mod tests {
     // r[verify env.invalid-name]
     #[test]
     fn unrepresentable_prefixed_variables() {
-        let vars = [("APP__NAME", "app"), ("APP__1NAME", "bad")];
+        let vars = [("APP__NAME", "app"), ("APP__NA.ME", "bad")];
         let source = EnvSource::from_vars(vars).prefix("APP");
         assert_eq!(
             load(&source),
             Err(EnvSourceError::InvalidName {
-                name: "APP__1NAME".into()
+                name: "APP__NA.ME".into()
             })
         );
 

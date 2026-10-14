@@ -63,8 +63,8 @@ impl fmt::Display for ConfigPath {
 
 /// One segment of a [`ConfigPath`], such as `jwt` or `ttl_seconds`.
 ///
-/// A segment starts with an ASCII letter or underscore and contains only ASCII
-/// alphanumerics and underscores. Use [`ConfigPathSegment::new`] for static names
+/// A segment is a struct field name or a map key, and contains only ASCII alphanumerics,
+/// underscores and hyphens. Use [`ConfigPathSegment::new`] for static names
 /// (validated at compile time in const contexts) and [`ConfigPathSegment::parse`] for
 /// names only known at runtime.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -81,12 +81,9 @@ impl ConfigPathSegment {
         match validate_segment(segment) {
             Ok(()) => Self(Cow::Borrowed(segment)),
             Err(InvalidPathSegment::Empty) => panic!("path segments should not be empty"),
-            Err(InvalidPathSegment::InvalidStart) => {
-                panic!("path segments should start with an alphabetic or a underscore")
-            }
-            Err(InvalidPathSegment::InvalidCharacter) => {
-                panic!("path segments should contain only alphanumeric characters or underscores")
-            }
+            Err(InvalidPathSegment::InvalidCharacter) => panic!(
+                "path segments should contain only alphanumeric characters, underscores or hyphens"
+            ),
         }
     }
 
@@ -107,7 +104,6 @@ impl ConfigPathSegment {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InvalidPathSegment {
     Empty,
-    InvalidStart,
     InvalidCharacter,
 }
 
@@ -115,15 +111,9 @@ impl fmt::Display for InvalidPathSegment {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Empty => write!(f, "path segments should not be empty"),
-            Self::InvalidStart => {
-                write!(
-                    f,
-                    "path segments should start with an alphabetic or a underscore"
-                )
-            }
             Self::InvalidCharacter => write!(
                 f,
-                "path segments should contain only alphanumeric characters or underscores"
+                "path segments should contain only alphanumeric characters, underscores or hyphens"
             ),
         }
     }
@@ -137,12 +127,9 @@ const fn validate_segment(segment: &str) -> Result<(), InvalidPathSegment> {
     if bytes.is_empty() {
         return Err(InvalidPathSegment::Empty);
     }
-    if !(bytes[0].is_ascii_alphabetic() || bytes[0] == b'_') {
-        return Err(InvalidPathSegment::InvalidStart);
-    }
     let mut i = 0;
     while i < bytes.len() {
-        if !(bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+        if !(bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'-') {
             return Err(InvalidPathSegment::InvalidCharacter);
         }
         i += 1;
@@ -167,21 +154,23 @@ mod tests {
         let segment = ConfigPathSegment::parse(String::from("ttl_seconds")).unwrap();
         assert_eq!(segment, ConfigPathSegment::new("ttl_seconds"));
         assert_eq!(ConfigPathSegment::parse(""), Err(InvalidPathSegment::Empty));
-        assert_eq!(
-            ConfigPathSegment::parse("1st"),
-            Err(InvalidPathSegment::InvalidStart)
-        );
-        assert_eq!(
-            ConfigPathSegment::parse("a-b"),
-            Err(InvalidPathSegment::InvalidCharacter)
-        );
+        // Map keys such as `eu-west` or `2024` are valid segments.
+        assert!(ConfigPathSegment::parse("eu-west").is_ok());
+        assert!(ConfigPathSegment::parse("2024").is_ok());
+        for invalid in ["a.b", "a b", "a/b", "*", "é"] {
+            assert_eq!(
+                ConfigPathSegment::parse(invalid),
+                Err(InvalidPathSegment::InvalidCharacter),
+                "{invalid}"
+            );
+        }
     }
 
     // r[verify path.segment.static]
     #[test]
-    #[should_panic(expected = "path segments should start with an alphabetic or a underscore")]
+    #[should_panic(expected = "path segments should contain only alphanumeric characters")]
     fn invalid_static_segments_panic() {
-        let name = "1st";
+        let name = "a.b";
         ConfigPathSegment::new(name);
     }
 

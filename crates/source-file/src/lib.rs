@@ -384,12 +384,12 @@ mod tests {
     // r[verify file.invalid-keys]
     #[test]
     fn invalid_keys() {
-        let value = object([("jwt", object([("ttl-seconds", Value::from("1"))]))]);
+        let value = object([("jwt", object([("ttl seconds", Value::from("1"))]))]);
         let source = FileSource::new(temp_file("keys"), Fixed(value));
         let Err(FileSourceError::InvalidKey { key, .. }) = source.load(&SCHEMA) else {
             panic!("expected an invalid key");
         };
-        assert_eq!(key, "jwt.ttl-seconds");
+        assert_eq!(key, "jwt.ttl seconds");
 
         let source = source.settings(
             ConfigSourceSettings::builder()
