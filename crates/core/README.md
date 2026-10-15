@@ -47,6 +47,23 @@ is secret.
 Map entries merge across sources, so a backend's public fields can come from a public file
 and its credentials from a secrets file.
 
+## Values from the app
+
+`ValuesSource` holds values the app gives itself, by config path, such as from its own
+command line flags. They're strings, parsed into their fields' types like environment
+variables, and checked like any other source's values: a path matching no field is an
+unknown path. Make it `.secrets()` for secret fields, such as a password read from a file
+named by a flag.
+
+```rust
+let mut flags = ValuesSource::new();
+if let Some(level) = args.log_level {
+    flags.insert(ConfigPath::parse("log.level")?, level);
+}
+let given = App::register_source(|never| match never {}, |path, _| Origin::Flag(path));
+let builder = builder.source_named("flags", given, flags);
+```
+
 ```toml
 [dependencies]
 ordna-core = "0.1"

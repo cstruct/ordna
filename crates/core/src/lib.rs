@@ -9,6 +9,7 @@ mod path;
 mod provenance;
 mod schema;
 mod source;
+mod values;
 
 pub use builder::{ConfigBuilder, LoadedConfig};
 pub use error::{ConfigLoadError, ConfigViolations, DecodeError, SourceLoadError};
@@ -25,6 +26,8 @@ pub use source::{
     ConfigLayer, ConfigSource, ConfigSourceSettings, FieldCandidate, SourceFieldPath, SourceKind,
     SourceMeta,
 };
+
+pub use values::{ValueDetail, ValuesSource};
 
 pub use ordna_macros::{config, config_tree};
 

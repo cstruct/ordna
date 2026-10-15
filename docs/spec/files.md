@@ -44,6 +44,9 @@ file.
 r[format.styx]
 The Styx format MUST parse Styx documents, passing every scalar on as a string.
 
+r[format.styx.empty]
+A Styx document without values, empty or only comments, MUST set nothing.
+
 r[format.json]
 The JSON format MUST parse JSON documents.
 
