@@ -124,7 +124,11 @@ facet = "0.46.5"
 
 ## Development
 
+[mise](https://mise.jdx.dev) installs the pinned Rust toolchain and tracey from
+[mise.toml](mise.toml).
+
 ```bash
+mise install
 cargo test --workspace
 ```
 
