@@ -139,3 +139,18 @@ The behaviour is specified in [docs/spec](docs/spec) and tracked with
 ```bash
 tracey query status
 ```
+
+## Releasing
+
+The crates share the workspace version and are released together. Bump it, along with the
+crates' requirements on each other, with
+[cargo-edit](https://github.com/killercup/cargo-edit), then tag the commit:
+
+```bash
+cargo set-version --workspace 0.2.0
+```
+
+Pushing a `v0.2.0` tag runs the [release workflow](.github/workflows/release.yml): it checks
+the tag against the version, runs CI, including
+[cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks) against the last
+release, then publishes the crates to crates.io and creates a GitHub release.
