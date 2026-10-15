@@ -8,7 +8,8 @@
 //! ```
 //!
 //! Styx scalars are untyped, so every scalar is passed on as a string and parsed into the
-//! field's type when the config is decoded.
+//! field's type when the config is decoded. A document without values, empty or only
+//! comments, sets nothing.
 
 use std::path::PathBuf;
 
@@ -30,6 +31,16 @@ impl FileFormat for Styx {
     }
 
     fn parse(&self, contents: &str) -> Result<Value, Self::Error> {
+        // r[impl format.styx.empty]
+        // Styx requires a value, but an empty file, or one with everything commented out,
+        // should just set nothing.
+        let blank = contents.lines().all(|line| {
+            let line = line.trim();
+            line.is_empty() || line.starts_with("//")
+        });
+        if blank {
+            return Ok(Value::from(facet_value::VObject::new()));
+        }
         facet_styx::from_str::<Value>(contents)
     }
 }
@@ -101,6 +112,19 @@ mod tests {
             from_value::<Vec<String>>(values[3].1.clone()).unwrap(),
             vec!["a", "b"]
         );
+    }
+
+    // r[verify format.styx.empty]
+    #[test]
+    fn files_without_values_set_nothing() {
+        for (name, contents) in [
+            ("empty", ""),
+            ("blank", "  \n\n"),
+            ("comments", "// name app\n  /// docs\n"),
+        ] {
+            let path = write(name, contents);
+            assert!(styx_file(&path).load(&SCHEMA).unwrap().is_empty(), "{name}");
+        }
     }
 
     // r[verify file.parse-error]
