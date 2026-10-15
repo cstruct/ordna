@@ -154,3 +154,8 @@ Pushing a `v0.2.0` tag runs the [release workflow](.github/workflows/release.yml
 the tag against the version, runs CI, including
 [cargo-semver-checks](https://github.com/obi1kenobi/cargo-semver-checks) against the last
 release, then publishes the crates to crates.io and creates a GitHub release.
+
+A new crate's first version has to be published by hand (`cargo publish -p <crate>`), and
+its trusted publisher set up on crates.io, before a release can publish it: crates.io only
+allows trusted publishing for crates that exist. The release skips crates already published
+at its version.
