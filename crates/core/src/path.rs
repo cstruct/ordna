@@ -22,7 +22,7 @@ impl ConfigPath {
     ///
     /// Panics if `segments` is empty.
     pub const fn new(segments: Vec<ConfigPathSegment>) -> Self {
-        assert!(segments.len() > 0, "Paths must have at least one segment");
+        assert!(!segments.is_empty(), "Paths must have at least one segment");
         Self { segments }
     }
 
