@@ -19,3 +19,7 @@ ordna-source-styx = { path = "../source-styx" }
 ordna-source-toml = { path = "../source-toml" }
 ordna-source-yaml = { path = "../source-yaml" }
 trybuild = "1.0.122"
+
+[lints.clippy]
+# Loading config fails with ordna's ConfigLoadError, which is large, but only once, at startup.
+result_large_err = "allow"

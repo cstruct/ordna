@@ -126,6 +126,10 @@ struct ConfigField {
     ty: FieldType,
 }
 
+#[allow(
+    clippy::large_enum_variant,
+    reason = "only lives while expanding a macro, where size doesn't matter"
+)]
 enum FieldType {
     Type(Type),
     /// A struct declared as the type.

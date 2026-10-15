@@ -1,0 +1,5 @@
+[tools]
+# The Rust toolchain, installed through rustup.
+rust = { version = "1.99.0", components = "rustfmt,clippy" }
+# Tracks the spec in docs/spec against the code, from its GitHub releases.
+"github:bearcove/tracey" = "1.4.0"

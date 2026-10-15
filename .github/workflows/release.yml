@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: '0'
+
+jobs:
+  validate:
+    name: Validate release version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check tag and dependencies against Cargo.toml
+        id: version
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import glob
+          import os
+          import tomllib
+
+          with open("Cargo.toml", "rb") as manifest:
+              version = tomllib.load(manifest)["workspace"]["package"]["version"]
+          tag = os.environ["TAG_NAME"]
+          if tag != f"v{version}":
+              raise SystemExit(f"Release tag {tag!r} must match the workspace version v{version}")
+
+          # The crates depend on each other by version too, which must be bumped along.
+          stale = []
+          for path in glob.glob("crates/*/Cargo.toml"):
+              with open(path, "rb") as manifest:
+                  crate = tomllib.load(manifest)
+              for table in ("dependencies", "dev-dependencies", "build-dependencies"):
+                  for name, spec in crate.get(table, {}).items():
+                      if name.startswith("ordna-") and isinstance(spec, dict):
+                          required = spec.get("version")
+                          if required is not None and required != version:
+                              stale.append(f"{path}: {name} = {required!r}")
+          if stale:
+              raise SystemExit(f"Dependencies on ordna crates must require {version}:\n" + "\n".join(stale))
+
+          prerelease = "-" in version.split("+", 1)[0]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"prerelease={str(prerelease).lower()}", file=output)
+          PY
+
+  ci:
+    name: Release checks
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish to crates.io
+    needs: [validate, ci]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Approve releases here, and name it in the crates.io trusted publishers.
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install tools
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+
+      # A short-lived token from crates.io's trusted publishing, so no token is stored.
+      - name: Authenticate with crates.io
+        id: auth
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+
+      # Publishes every crate but the unpublished ones, in dependency order.
+      - name: Publish crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --locked --workspace
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+        run: |
+          flags=()
+          if [[ "$PRERELEASE" == 'true' ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$TAG_NAME" --verify-tag --generate-notes --title "$TAG_NAME" "${flags[@]}"

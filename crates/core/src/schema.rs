@@ -19,7 +19,7 @@ pub struct Schema {
 impl Schema {
     pub const fn new<T: Facet<'static>>() -> Self {
         Self {
-            shape: &T::SHAPE,
+            shape: T::SHAPE,
             fields: OnceLock::new(),
         }
     }
