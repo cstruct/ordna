@@ -85,21 +85,17 @@ jobs:
       - name: Install tools
         uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
 
-      # A short-lived token from crates.io's trusted publishing, so no token is stored.
-      - name: Authenticate with crates.io
-        id: auth
-        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
-
-      # Publishes every crate, in dependency order, skipping those already on crates.io at
-      # this version: a crate's first version is published by hand, as trusted publishing
-      # can only be set up for crates that exist, and a failed release can be rerun.
-      - name: Publish crates
+      # Crates already on crates.io at this version are skipped: a crate's first version is
+      # published by hand, as trusted publishing can only be set up for crates that exist,
+      # and a failed release can be rerun.
+      - name: Find the crates to publish
+        id: unpublished
         env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
           TAG_NAME: ${{ github.ref_name }}
         run: |
           version="${TAG_NAME#v}"
           excludes=()
+          remaining=0
           while read -r name; do
             case ${#name} in
               1) index="1/$name" ;;
@@ -109,15 +105,28 @@ jobs:
             esac
             if curl -sf "https://index.crates.io/$index" | grep -q "\"vers\":\"$version\""; then
               echo "$name $version is already published"
-              excludes+=(--exclude "$name")
+              excludes+=("--exclude $name")
+            else
+              remaining=$((remaining + 1))
             fi
           done < <(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.publish == null) | .name')
-          remaining=$(cargo metadata --no-deps --format-version 1 | jq '[.packages[] | select(.publish == null)] | length')
-          if (( ${#excludes[@]} / 2 == remaining )); then
-            echo "Every crate is already published"
-          else
-            cargo publish --locked --workspace "${excludes[@]}"
-          fi
+          echo "remaining=$remaining" >> "$GITHUB_OUTPUT"
+          echo "excludes=${excludes[*]}" >> "$GITHUB_OUTPUT"
+
+      # A short-lived token from crates.io's trusted publishing, so no token is stored.
+      - name: Authenticate with crates.io
+        id: auth
+        if: steps.unpublished.outputs.remaining != '0'
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+
+      # Publishes the remaining crates, in dependency order.
+      - name: Publish crates
+        if: steps.unpublished.outputs.remaining != '0'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+          EXCLUDES: ${{ steps.unpublished.outputs.excludes }}
+        # EXCLUDES is `--exclude name` pairs, split into words on purpose.
+        run: cargo publish --locked --workspace $EXCLUDES
 
       - name: Create GitHub release
         env:
