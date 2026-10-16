@@ -1,3 +1,4 @@
+mod required;
 pub(crate) mod tree;
 
 use std::collections::{BTreeMap, btree_map::Entry};
@@ -57,7 +58,18 @@ where
 
     // r[impl load.decode]
     // r[impl load.decode.strings]
-    let config = from_value::<T>(Value::from(root)).map_err(|error| {
+    let root = Value::from(root);
+    let missing = required::missing_required_fields(T::SHAPE, &root);
+    if !missing.is_empty() {
+        let mut violations = ConfigViolations::default();
+        for path in missing {
+            violations.add_decode_violation(DecodeError {
+                message: format!("missing required field `{path}`"),
+            });
+        }
+        return Err(ConfigLoadError::Violations(violations));
+    }
+    let config = from_value::<T>(root).map_err(|error| {
         let mut violations = ConfigViolations::default();
         violations.add_decode_violation(DecodeError {
             message: error.to_string(),
@@ -359,5 +371,41 @@ mod tests {
             panic!("expected violations");
         };
         assert_eq!(violations.decode_errors().len(), 1);
+    }
+
+    fn decode_messages(sources: Vec<BoundSource<NoPath, String>>) -> Vec<String> {
+        let Err(ConfigLoadError::Violations(violations)) =
+            load_config_from_sources::<App, NoPath, String>(sources)
+        else {
+            panic!("expected violations");
+        };
+        violations
+            .decode_errors()
+            .iter()
+            .map(|error| error.message.clone())
+            .collect()
+    }
+
+    // r[verify load.decode]
+    #[test]
+    fn missing_top_level_scalars_fail_to_decode() {
+        let sources = vec![source(vec![(
+            path(&["jwt", "ttl_seconds"]),
+            Value::from(1u32),
+        )])];
+        assert_eq!(decode_messages(sources), ["missing required field `name`"]);
+    }
+
+    // r[verify load.decode]
+    #[test]
+    fn missing_nested_scalars_fail_to_decode() {
+        let sources = vec![source(vec![
+            (path(&["name"]), Value::from("app")),
+            (path(&["jwt", "issuer"]), Value::from("me")),
+        ])];
+        assert_eq!(
+            decode_messages(sources),
+            ["missing required field `jwt.ttl_seconds`"]
+        );
     }
 }
