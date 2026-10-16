@@ -172,15 +172,15 @@ fn decode_violations_of_every_context_are_reported() {
     let errors = violations
         .decode_errors()
         .iter()
-        .map(|error| (error.model, error.message.as_str()))
+        .map(|error| error.message.as_str())
         .collect::<Vec<_>>();
     assert_eq!(
         errors,
         [
-            ("Http", "missing required field `port`"),
-            ("Http", "missing required field `public_url`"),
-            ("Db", "missing required field `db`"),
-            ("Mailer", "missing required field `smtp`"),
+            "Http: missing required field `port`",
+            "Http: missing required field `public_url`",
+            "Db: missing required field `db`",
+            "Mailer: missing required field `smtp`",
         ]
     );
 }

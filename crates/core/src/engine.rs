@@ -30,7 +30,10 @@ where
     T: ConfigModel<'static, P, E>,
     P: SourceFieldPath,
 {
-    load_from_sources(T::schema(), sources, |decoder| decoder.decode::<T>())
+    let schema = T::schema();
+    load_from_sources(schema, sources, |decoder| {
+        decoder.decode_with::<T>(schema, None)
+    })
 }
 
 /// Loads contexts `T` of the set `C` from `sources`: validates the sources against the
@@ -200,7 +203,7 @@ mod tests {
 
     use super::load_config_from_sources;
     use crate::{
-        ConfigLoadError, ConfigModel, ConfigPath, ConfigPathSegment, ConfigSchema, ConfigSource,
+        ConfigLoadError, ConfigModel, ConfigPath, ConfigPathSegment, ConfigSource,
         ConfigSourceSettings, FieldCandidate, Schema, SourceFieldPath, SourceRegistration,
         source::{binding::BoundSource, field_candidate::SourceValueDetail},
     };
@@ -226,13 +229,11 @@ mod tests {
 
     static SCHEMA: Schema = Schema::new::<App>();
 
-    impl ConfigSchema for App {
+    impl ConfigModel<'static, NoPath, String> for App {
         fn schema() -> &'static Schema {
             &SCHEMA
         }
     }
-
-    impl ConfigModel<'static, NoPath, String> for App {}
 
     #[derive(Debug)]
     struct Detail;

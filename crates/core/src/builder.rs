@@ -10,7 +10,6 @@ use crate::{
 struct ConfigBuilderInner<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigSchema,
     P: SourceFieldPath,
 {
     sources: Vec<BoundSource<P, E>>,
@@ -20,23 +19,19 @@ where
 pub struct ConfigBuilder<'facet, T, P, E>(ConfigBuilderInner<'facet, T, P, E>)
 where
     E: Send + Sync + 'static,
-    T: ConfigSchema,
     P: SourceFieldPath;
 pub struct ConfigBuilderNamed<'facet, T, P, E>(ConfigBuilderInner<'facet, T, P, E>)
 where
     E: Send + Sync + 'static,
-    T: ConfigSchema,
     P: SourceFieldPath;
 pub struct ConfigBuilderAnonymous<'facet, T, P, E>(ConfigBuilderInner<'facet, T, P, E>)
 where
     E: Send + Sync + 'static,
-    T: ConfigSchema,
     P: SourceFieldPath;
 
 impl<'facet, T, P, E> ConfigBuilderInner<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigSchema,
     P: SourceFieldPath,
 {
     fn new() -> Self {
@@ -78,7 +73,6 @@ where
 impl<'facet, T, P, E> Default for ConfigBuilder<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigSchema,
     P: SourceFieldPath,
 {
     fn default() -> Self {
@@ -89,7 +83,6 @@ where
 impl<'facet, T, P, E> ConfigBuilder<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigSchema,
     P: SourceFieldPath,
 {
     /// A builder without sources. Add sources with either [`Self::source`] or
@@ -129,7 +122,6 @@ where
 impl<'facet, T, P, E> ConfigBuilderAnonymous<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigSchema,
     P: SourceFieldPath,
 {
     pub fn source<S>(
@@ -148,7 +140,6 @@ where
 impl<'facet, T, P, E> ConfigBuilderNamed<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigSchema,
     P: SourceFieldPath,
 {
     pub fn source_named<S>(

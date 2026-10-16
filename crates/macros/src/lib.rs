@@ -365,6 +365,9 @@ impl ConfigStruct {
                 P: ::ordna_core::SourceFieldPath,
                 E: ::core::marker::Send + ::core::marker::Sync + 'static,
             {
+                fn schema() -> &'static ::ordna_core::Schema {
+                    <#ident as ::ordna_core::ConfigSchema>::schema()
+                }
             }
 
             #(#nested)*

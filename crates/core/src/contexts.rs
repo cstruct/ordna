@@ -48,13 +48,21 @@ impl<'a, P> ContextDecoder<'a, P> {
         }
     }
 
+    /// Decodes context `T`, naming it in its violations.
+    pub(crate) fn decode<T: ConfigSchema + Facet<'static>>(&mut self) -> Option<T> {
+        self.decode_with(T::schema(), Some(T::SHAPE.type_identifier))
+    }
+
     // r[impl load.decode]
     // r[impl load.decode.strings]
     // r[impl contexts.decode]
-    /// Decodes `T` from the values of its own fields, recording a decode violation if it
-    /// fails.
-    pub(crate) fn decode<T: ConfigSchema + Facet<'static>>(&mut self) -> Option<T> {
-        let schema = T::schema();
+    /// Decodes `T` from the values of the fields of `schema`, recording decode violations,
+    /// prefixed with `context` if given, if it fails.
+    pub(crate) fn decode_with<T: Facet<'static>>(
+        &mut self,
+        schema: &'static Schema,
+        context: Option<&str>,
+    ) -> Option<T> {
         self.schemas.push(schema);
         let mut root = VObject::new();
         for (path, contenders) in self.candidates {
@@ -63,24 +71,24 @@ impl<'a, P> ContextDecoder<'a, P> {
                 insert_nested(&mut root, path, winner.value().clone());
             }
         }
+        let mut violation = |message: String| {
+            let message = match context {
+                Some(context) => format!("{context}: {message}"),
+                None => message,
+            };
+            self.violations
+                .add_decode_violation(DecodeError { message });
+        };
         let root = Value::from(root);
         let missing = required::missing_required_fields(T::SHAPE, &root);
         if !missing.is_empty() {
             for path in missing {
-                self.violations.add_decode_violation(DecodeError {
-                    model: T::SHAPE.type_identifier,
-                    message: format!("missing required field `{path}`"),
-                });
+                violation(format!("missing required field `{path}`"));
             }
             return None;
         }
         from_value::<T>(root)
-            .map_err(|error| {
-                self.violations.add_decode_violation(DecodeError {
-                    model: T::SHAPE.type_identifier,
-                    message: error.to_string(),
-                });
-            })
+            .map_err(|error| violation(error.to_string()))
             .ok()
     }
 
