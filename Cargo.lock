@@ -412,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "integration-tests"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "facet",
  "ordna-core",
@@ -490,7 +490,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "ordna-core"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "facet",
  "facet-core",
@@ -500,7 +500,7 @@ dependencies = [
 
 [[package]]
 name = "ordna-macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -509,7 +509,7 @@ dependencies = [
 
 [[package]]
 name = "ordna-source-env"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "facet",
  "facet-value",
@@ -518,7 +518,7 @@ dependencies = [
 
 [[package]]
 name = "ordna-source-file"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "facet",
  "facet-value",
@@ -527,7 +527,7 @@ dependencies = [
 
 [[package]]
 name = "ordna-source-json"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "facet",
  "facet-json",
@@ -538,7 +538,7 @@ dependencies = [
 
 [[package]]
 name = "ordna-source-styx"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "facet",
  "facet-styx",
@@ -549,7 +549,7 @@ dependencies = [
 
 [[package]]
 name = "ordna-source-toml"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "facet",
  "facet-toml",
@@ -560,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "ordna-source-yaml"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "facet",
  "facet-value",

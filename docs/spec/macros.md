@@ -33,6 +33,10 @@ r[macro.raw-idents]
 A field named with a raw identifier MUST use the name without the `r#` prefix as its
 config path segment.
 
+r[macro.contexts]
+`config_contexts!(Name = [A, B, ..])` MUST declare a type `Name` for the context set of
+the config models `A`, `B`, .., and make each of them a context of it.
+
 ## Field attributes
 
 r[macro.path]

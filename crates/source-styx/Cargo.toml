@@ -11,8 +11,8 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-ordna-core = { path = "../core", version = "0.1.1" }
-ordna-source-file = { path = "../source-file", version = "0.1.1" }
+ordna-core = { path = "../core", version = "0.1.2" }
+ordna-source-file = { path = "../source-file", version = "0.1.2" }
 facet-styx = "4.0.0"
 facet-value = "0.46.0"
 

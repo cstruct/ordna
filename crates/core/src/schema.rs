@@ -6,20 +6,37 @@ use crate::{
     ConfigLayer, ConfigPath, ConfigPathPattern, ConfigPathSegment, engine::tree::schema_fields,
 };
 
-/// The fields of a config model, as path patterns with the layer of each field.
+/// The fields of a config model, or of a set of config contexts, as path patterns with the
+/// layer of each field.
 ///
 /// Struct fields are static segments; map keys are dynamic segments matching any key, as
 /// in `backends.*.bucket`.
 #[derive(Debug, Clone)]
 pub struct Schema {
-    shape: &'static Shape,
+    shapes: Shapes,
     fields: OnceLock<BTreeMap<ConfigPathPattern, ConfigLayer>>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Shapes {
+    One(&'static Shape),
+    Union(&'static [&'static Shape]),
 }
 
 impl Schema {
     pub const fn new<T: Facet<'static>>() -> Self {
         Self {
-            shape: T::SHAPE,
+            shapes: Shapes::One(T::SHAPE),
+            fields: OnceLock::new(),
+        }
+    }
+
+    // r[impl contexts.schema]
+    /// The fields of every one of `shapes`, such as the contexts of a set declared with
+    /// `config_contexts!`.
+    pub const fn union(shapes: &'static [&'static Shape]) -> Self {
+        Self {
+            shapes: Shapes::Union(shapes),
             fields: OnceLock::new(),
         }
     }
@@ -30,7 +47,20 @@ impl Schema {
     /// Secret fields are marked with `#[config(secret)]` (or `#[facet(sensitive)]`), which
     /// also makes every field nested in them secret.
     pub fn fields(&self) -> &BTreeMap<ConfigPathPattern, ConfigLayer> {
-        self.fields.get_or_init(|| schema_fields(self.shape))
+        self.fields.get_or_init(|| match self.shapes {
+            Shapes::One(shape) => schema_fields(shape),
+            Shapes::Union(shapes) => {
+                let mut fields = BTreeMap::new();
+                for (pattern, layer) in shapes.iter().flat_map(|shape| schema_fields(shape)) {
+                    // r[impl contexts.schema.secret]
+                    let existing = fields.entry(pattern).or_insert(layer);
+                    if layer == ConfigLayer::Secret {
+                        *existing = ConfigLayer::Secret;
+                    }
+                }
+                fields
+            }
+        })
     }
 
     /// The fields without dynamic segments, such as `jwt.ttl_seconds`.
@@ -40,12 +70,15 @@ impl Schema {
             .filter_map(ConfigPathPattern::as_static)
     }
 
-    /// The layer of the field `path` matches, or `None` if it matches no field.
+    /// The layer of the field `path` matches, or `None` if it matches no field. A path
+    /// matching several fields, such as `db.main.host` for both `db.main.host` and
+    /// `db.*.host` in a union, is secret if any of them is.
     pub fn layer(&self, path: &ConfigPath) -> Option<ConfigLayer> {
         self.fields()
             .iter()
-            .find(|(pattern, _)| pattern.matches(path))
+            .filter(|(pattern, _)| pattern.matches(path))
             .map(|(_, layer)| *layer)
+            .max_by_key(|layer| *layer == ConfigLayer::Secret)
     }
 
     /// Whether `segments` lead towards fields, such as `backends` or `backends.eu-west`

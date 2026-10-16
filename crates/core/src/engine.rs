@@ -1,13 +1,15 @@
+pub(crate) mod required;
 pub(crate) mod tree;
 
 use std::collections::{BTreeMap, btree_map::Entry};
 
-use facet_value::{VObject, Value, from_value};
+use facet_value::{VObject, Value};
 
 use crate::{
-    ConfigLayer, ConfigLoadError, ConfigModel, ConfigPath, ConfigValueSource, FieldCandidate,
-    LoadedConfig, SourceFieldPath, SourceResolution,
-    error::{ConfigViolations, DecodeError},
+    ConfigContexts, ConfigLayer, ConfigLoadError, ConfigModel, ConfigPath, ConfigSchema,
+    ConfigValueSource, FieldCandidate, LoadedConfig, Schema, SourceFieldPath, SourceResolution,
+    contexts::ContextDecoder,
+    error::ConfigViolations,
     issue::{ConflictIssue, LayerMismatchIssue},
     source::binding::BoundSource,
 };
@@ -29,6 +31,36 @@ where
     P: SourceFieldPath,
 {
     let schema = T::schema();
+    load_from_sources(schema, sources, |decoder| {
+        decoder.decode_with::<T>(schema, None)
+    })
+}
+
+/// Loads contexts `T` of the set `C` from `sources`: validates the sources against the
+/// fields of every context of the set, then decodes each of `T` from the values of its own
+/// fields. See [`load_config_from_sources`].
+pub(crate) fn load_contexts_from_sources<C, T, P, E>(
+    sources: Vec<BoundSource<P, E>>,
+) -> Result<LoadedConfig<'static, T, P, E>, ConfigLoadError<E>>
+where
+    E: Send + Sync + 'static,
+    C: ConfigSchema,
+    T: ConfigContexts<C>,
+    P: SourceFieldPath,
+{
+    // r[impl contexts.validate]
+    load_from_sources(C::schema(), sources, T::decode)
+}
+
+fn load_from_sources<T, P, E>(
+    schema: &'static Schema,
+    sources: Vec<BoundSource<P, E>>,
+    decode: impl FnOnce(&mut ContextDecoder<'_, P>) -> Option<T>,
+) -> Result<LoadedConfig<'static, T, P, E>, ConfigLoadError<E>>
+where
+    E: Send + Sync + 'static,
+    P: SourceFieldPath,
+{
     let mut violations = ConfigViolations::default();
 
     // r[impl load.precedence]
@@ -44,32 +76,25 @@ where
         }
     }
 
-    let mut root = VObject::new();
-    for (path, contenders) in &candidates {
-        let winner = contenders.last().expect("entries always hold a candidate");
-        insert_nested(&mut root, path, winner.value().clone());
-    }
-
     // r[impl load.violations.collect]
     if violations.has_violations() {
         return Err(ConfigLoadError::Violations(violations));
     }
 
-    // r[impl load.decode]
-    // r[impl load.decode.strings]
-    let config = from_value::<T>(Value::from(root)).map_err(|error| {
-        let mut violations = ConfigViolations::default();
-        violations.add_decode_violation(DecodeError {
-            message: error.to_string(),
-        });
-        ConfigLoadError::Violations(violations)
-    })?;
+    let mut decoder = ContextDecoder::new(&candidates, &mut violations);
+    let config = decode(&mut decoder);
+    let decoded = decoder.into_schemas();
+    let Some(config) = config else {
+        return Err(ConfigLoadError::Violations(violations));
+    };
 
     // r[impl provenance.winner]
     // r[impl provenance.shadowed]
     // r[impl provenance.list]
+    // r[impl contexts.provenance]
     let sources = candidates
         .into_iter()
+        .filter(|(path, _)| decoded.iter().any(|schema| schema.layer(path).is_some()))
         .map(|(path, contenders)| {
             let mut origins = contenders
                 .into_iter()
@@ -151,7 +176,7 @@ where
 
 // r[impl load.merge]
 /// Inserts `value` into `root` at `path`, creating intermediate objects.
-fn insert_nested(root: &mut VObject, path: &ConfigPath, value: Value) {
+pub(crate) fn insert_nested(root: &mut VObject, path: &ConfigPath, value: Value) {
     let segments = path.segments();
     let (leaf, parents) = segments.split_last().expect("config paths are never empty");
     let mut node = root;
@@ -359,5 +384,41 @@ mod tests {
             panic!("expected violations");
         };
         assert_eq!(violations.decode_errors().len(), 1);
+    }
+
+    fn decode_messages(sources: Vec<BoundSource<NoPath, String>>) -> Vec<String> {
+        let Err(ConfigLoadError::Violations(violations)) =
+            load_config_from_sources::<App, NoPath, String>(sources)
+        else {
+            panic!("expected violations");
+        };
+        violations
+            .decode_errors()
+            .iter()
+            .map(|error| error.message.clone())
+            .collect()
+    }
+
+    // r[verify load.decode]
+    #[test]
+    fn missing_top_level_scalars_fail_to_decode() {
+        let sources = vec![source(vec![(
+            path(&["jwt", "ttl_seconds"]),
+            Value::from(1u32),
+        )])];
+        assert_eq!(decode_messages(sources), ["missing required field `name`"]);
+    }
+
+    // r[verify load.decode]
+    #[test]
+    fn missing_nested_scalars_fail_to_decode() {
+        let sources = vec![source(vec![
+            (path(&["name"]), Value::from("app")),
+            (path(&["jwt", "issuer"]), Value::from("me")),
+        ])];
+        assert_eq!(
+            decode_messages(sources),
+            ["missing required field `jwt.ttl_seconds`"]
+        );
     }
 }

@@ -1,16 +1,15 @@
 use std::{collections::BTreeMap, marker::PhantomData};
 
 use crate::{
-    ConfigLoadError, ConfigModel, ConfigPath, ConfigSource, ConfigValueSource, SourceFieldPath,
-    SourceResolution,
-    engine::load_config_from_sources,
+    ConfigContext, ConfigContexts, ConfigLoadError, ConfigModel, ConfigPath, ConfigSchema,
+    ConfigSource, ConfigValueSource, SourceFieldPath, SourceResolution,
+    engine::{load_config_from_sources, load_contexts_from_sources},
     source::{binding::BoundSource, registration::SourceRegistration},
 };
 
 struct ConfigBuilderInner<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E>,
     P: SourceFieldPath,
 {
     sources: Vec<BoundSource<P, E>>,
@@ -20,23 +19,19 @@ where
 pub struct ConfigBuilder<'facet, T, P, E>(ConfigBuilderInner<'facet, T, P, E>)
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E>,
     P: SourceFieldPath;
 pub struct ConfigBuilderNamed<'facet, T, P, E>(ConfigBuilderInner<'facet, T, P, E>)
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E>,
     P: SourceFieldPath;
 pub struct ConfigBuilderAnonymous<'facet, T, P, E>(ConfigBuilderInner<'facet, T, P, E>)
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E>,
     P: SourceFieldPath;
 
 impl<'facet, T, P, E> ConfigBuilderInner<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E>,
     P: SourceFieldPath,
 {
     fn new() -> Self {
@@ -78,7 +73,6 @@ where
 impl<'facet, T, P, E> Default for ConfigBuilder<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E>,
     P: SourceFieldPath,
 {
     fn default() -> Self {
@@ -89,7 +83,6 @@ where
 impl<'facet, T, P, E> ConfigBuilder<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E>,
     P: SourceFieldPath,
 {
     /// A builder without sources. Add sources with either [`Self::source`] or
@@ -129,7 +122,6 @@ where
 impl<'facet, T, P, E> ConfigBuilderAnonymous<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E>,
     P: SourceFieldPath,
 {
     pub fn source<S>(
@@ -148,7 +140,6 @@ where
 impl<'facet, T, P, E> ConfigBuilderNamed<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E>,
     P: SourceFieldPath,
 {
     pub fn source_named<S>(
@@ -178,6 +169,28 @@ where
 
     pub fn load_with_meta(self) -> Result<LoadedConfig<'static, T, P, E>, ConfigLoadError<E>> {
         load_config_from_sources(self.sources)
+    }
+}
+
+impl<C, P, E> ConfigBuilderInner<'static, C, P, E>
+where
+    E: Send + Sync + 'static,
+    C: ConfigSchema,
+    P: SourceFieldPath,
+{
+    fn load_context<X: ConfigContext<C>>(self) -> Result<X, ConfigLoadError<E>> {
+        let (context,) = self.load_contexts::<(X,)>()?;
+        Ok(context)
+    }
+
+    fn load_contexts<X: ConfigContexts<C>>(self) -> Result<X, ConfigLoadError<E>> {
+        Ok(self.load_contexts_with_meta()?.config)
+    }
+
+    fn load_contexts_with_meta<X: ConfigContexts<C>>(
+        self,
+    ) -> Result<LoadedConfig<'static, X, P, E>, ConfigLoadError<E>> {
+        load_contexts_from_sources::<C, X, P, E>(self.sources)
     }
 }
 
@@ -211,10 +224,66 @@ where
     }
 }
 
+impl<C, P, E> ConfigBuilderAnonymous<'static, C, P, E>
+where
+    E: Send + Sync + 'static,
+    C: ConfigSchema,
+    P: SourceFieldPath,
+{
+    /// Loads one context of the set `C`. See [`Self::load_contexts`].
+    pub fn load_context<X: ConfigContext<C>>(self) -> Result<X, ConfigLoadError<E>> {
+        self.0.load_context()
+    }
+
+    /// Loads the contexts `X` of the set `C`, a tuple such as `(Http, Db)`.
+    ///
+    /// The sources are checked against the fields of every context of the set, so a value
+    /// for a field of a context that isn't loaded is accepted, and each context is decoded
+    /// from the values of its own fields only.
+    pub fn load_contexts<X: ConfigContexts<C>>(self) -> Result<X, ConfigLoadError<E>> {
+        self.0.load_contexts()
+    }
+
+    /// Like [`Self::load_contexts`], along with the provenance of the fields of `X`.
+    pub fn load_contexts_with_meta<X: ConfigContexts<C>>(
+        self,
+    ) -> Result<LoadedConfig<'static, X, P, E>, ConfigLoadError<E>> {
+        self.0.load_contexts_with_meta()
+    }
+}
+
+impl<C, P, E> ConfigBuilderNamed<'static, C, P, E>
+where
+    E: Send + Sync + 'static,
+    C: ConfigSchema,
+    P: SourceFieldPath,
+{
+    /// Loads one context of the set `C`. See [`Self::load_contexts`].
+    pub fn load_context<X: ConfigContext<C>>(self) -> Result<X, ConfigLoadError<E>> {
+        self.0.load_context()
+    }
+
+    /// Loads the contexts `X` of the set `C`, a tuple such as `(Http, Db)`.
+    ///
+    /// The sources are checked against the fields of every context of the set, so a value
+    /// for a field of a context that isn't loaded is accepted, and each context is decoded
+    /// from the values of its own fields only.
+    pub fn load_contexts<X: ConfigContexts<C>>(self) -> Result<X, ConfigLoadError<E>> {
+        self.0.load_contexts()
+    }
+
+    /// Like [`Self::load_contexts`], along with the provenance of the fields of `X`.
+    pub fn load_contexts_with_meta<X: ConfigContexts<C>>(
+        self,
+    ) -> Result<LoadedConfig<'static, X, P, E>, ConfigLoadError<E>> {
+        self.0.load_contexts_with_meta()
+    }
+}
+
+/// A loaded config model, or tuple of contexts, with the provenance of every set field.
 pub struct LoadedConfig<'facet, T, P: SourceFieldPath, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E>,
     P: SourceFieldPath,
 {
     config: T,
@@ -226,7 +295,7 @@ where
 impl<'facet, T, P, E> std::fmt::Debug for LoadedConfig<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E> + std::fmt::Debug,
+    T: std::fmt::Debug,
     P: SourceFieldPath + std::fmt::Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -240,7 +309,6 @@ where
 impl<'facet, T, P, E> LoadedConfig<'facet, T, P, E>
 where
     E: Send + Sync + 'static,
-    T: ConfigModel<'facet, P, E>,
     P: SourceFieldPath,
 {
     pub(crate) fn new(config: T, sources: Vec<(ConfigPath, SourceResolution<P>)>) -> Self {
