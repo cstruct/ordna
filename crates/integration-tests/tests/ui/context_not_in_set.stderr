@@ -1,0 +1,26 @@
+error[E0277]: `Mailer` is not a context of `AppContexts`
+  --> tests/ui/context_not_in_set.rs:31:26
+   |
+31 |         .load_contexts::<(Http, Mailer)>();
+   |          -------------   ^^^^^^^^^^^^^^ not in the context set
+   |          |
+   |          required by a bound introduced by this call
+   |
+help: the trait `ConfigContext<AppContexts>` is not implemented for `Mailer`
+  --> tests/ui/context_not_in_set.rs:10:1
+   |
+10 | #[config]
+   | ^^^^^^^^^
+   = note: add `Mailer` to the `config_contexts!` declaring `AppContexts`
+help: the trait `ConfigContext<AppContexts>` is implemented for `Http`
+  --> tests/ui/context_not_in_set.rs:15:1
+   |
+15 | config_contexts!(pub AppContexts = [Http]);
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: required for `(Http, Mailer)` to implement `ConfigContexts<AppContexts>`
+note: required by a bound in `ordna_core::builder::ConfigBuilderAnonymous::<'static, C, P, E>::load_contexts`
+  --> $WORKSPACE/crates/core/src/builder.rs
+   |
+   |     pub fn load_contexts<X: ConfigContexts<C>>(self) -> Result<X, ConfigLoadError<E>> {
+   |                             ^^^^^^^^^^^^^^^^^ required by this bound in `ConfigBuilderAnonymous::<'static, C, P, E>::load_contexts`
+   = note: this error originates in the attribute macro `config` which comes from the expansion of the macro `config_contexts` (in Nightly builds, run with -Z macro-backtrace for more info)

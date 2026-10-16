@@ -1,14 +1,15 @@
-mod required;
+pub(crate) mod required;
 pub(crate) mod tree;
 
 use std::collections::{BTreeMap, btree_map::Entry};
 
-use facet_value::{VObject, Value, from_value};
+use facet_value::{VObject, Value};
 
 use crate::{
-    ConfigLayer, ConfigLoadError, ConfigModel, ConfigPath, ConfigValueSource, FieldCandidate,
-    LoadedConfig, SourceFieldPath, SourceResolution,
-    error::{ConfigViolations, DecodeError},
+    ConfigContexts, ConfigLayer, ConfigLoadError, ConfigModel, ConfigPath, ConfigSchema,
+    ConfigValueSource, FieldCandidate, LoadedConfig, Schema, SourceFieldPath, SourceResolution,
+    contexts::ContextDecoder,
+    error::ConfigViolations,
     issue::{ConflictIssue, LayerMismatchIssue},
     source::binding::BoundSource,
 };
@@ -29,7 +30,34 @@ where
     T: ConfigModel<'static, P, E>,
     P: SourceFieldPath,
 {
-    let schema = T::schema();
+    load_from_sources(T::schema(), sources, |decoder| decoder.decode::<T>())
+}
+
+/// Loads contexts `T` of the set `C` from `sources`: validates the sources against the
+/// fields of every context of the set, then decodes each of `T` from the values of its own
+/// fields. See [`load_config_from_sources`].
+pub(crate) fn load_contexts_from_sources<C, T, P, E>(
+    sources: Vec<BoundSource<P, E>>,
+) -> Result<LoadedConfig<'static, T, P, E>, ConfigLoadError<E>>
+where
+    E: Send + Sync + 'static,
+    C: ConfigSchema,
+    T: ConfigContexts<C>,
+    P: SourceFieldPath,
+{
+    // r[impl contexts.validate]
+    load_from_sources(C::schema(), sources, T::decode)
+}
+
+fn load_from_sources<T, P, E>(
+    schema: &'static Schema,
+    sources: Vec<BoundSource<P, E>>,
+    decode: impl FnOnce(&mut ContextDecoder<'_, P>) -> Option<T>,
+) -> Result<LoadedConfig<'static, T, P, E>, ConfigLoadError<E>>
+where
+    E: Send + Sync + 'static,
+    P: SourceFieldPath,
+{
     let mut violations = ConfigViolations::default();
 
     // r[impl load.precedence]
@@ -45,43 +73,25 @@ where
         }
     }
 
-    let mut root = VObject::new();
-    for (path, contenders) in &candidates {
-        let winner = contenders.last().expect("entries always hold a candidate");
-        insert_nested(&mut root, path, winner.value().clone());
-    }
-
     // r[impl load.violations.collect]
     if violations.has_violations() {
         return Err(ConfigLoadError::Violations(violations));
     }
 
-    // r[impl load.decode]
-    // r[impl load.decode.strings]
-    let root = Value::from(root);
-    let missing = required::missing_required_fields(T::SHAPE, &root);
-    if !missing.is_empty() {
-        let mut violations = ConfigViolations::default();
-        for path in missing {
-            violations.add_decode_violation(DecodeError {
-                message: format!("missing required field `{path}`"),
-            });
-        }
+    let mut decoder = ContextDecoder::new(&candidates, &mut violations);
+    let config = decode(&mut decoder);
+    let decoded = decoder.into_schemas();
+    let Some(config) = config else {
         return Err(ConfigLoadError::Violations(violations));
-    }
-    let config = from_value::<T>(root).map_err(|error| {
-        let mut violations = ConfigViolations::default();
-        violations.add_decode_violation(DecodeError {
-            message: error.to_string(),
-        });
-        ConfigLoadError::Violations(violations)
-    })?;
+    };
 
     // r[impl provenance.winner]
     // r[impl provenance.shadowed]
     // r[impl provenance.list]
+    // r[impl contexts.provenance]
     let sources = candidates
         .into_iter()
+        .filter(|(path, _)| decoded.iter().any(|schema| schema.layer(path).is_some()))
         .map(|(path, contenders)| {
             let mut origins = contenders
                 .into_iter()
@@ -163,7 +173,7 @@ where
 
 // r[impl load.merge]
 /// Inserts `value` into `root` at `path`, creating intermediate objects.
-fn insert_nested(root: &mut VObject, path: &ConfigPath, value: Value) {
+pub(crate) fn insert_nested(root: &mut VObject, path: &ConfigPath, value: Value) {
     let segments = path.segments();
     let (leaf, parents) = segments.split_last().expect("config paths are never empty");
     let mut node = root;
@@ -190,7 +200,7 @@ mod tests {
 
     use super::load_config_from_sources;
     use crate::{
-        ConfigLoadError, ConfigModel, ConfigPath, ConfigPathSegment, ConfigSource,
+        ConfigLoadError, ConfigModel, ConfigPath, ConfigPathSegment, ConfigSchema, ConfigSource,
         ConfigSourceSettings, FieldCandidate, Schema, SourceFieldPath, SourceRegistration,
         source::{binding::BoundSource, field_candidate::SourceValueDetail},
     };
@@ -216,11 +226,13 @@ mod tests {
 
     static SCHEMA: Schema = Schema::new::<App>();
 
-    impl ConfigModel<'static, NoPath, String> for App {
+    impl ConfigSchema for App {
         fn schema() -> &'static Schema {
             &SCHEMA
         }
     }
+
+    impl ConfigModel<'static, NoPath, String> for App {}
 
     #[derive(Debug)]
     struct Detail;

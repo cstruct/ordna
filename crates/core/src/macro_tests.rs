@@ -1,9 +1,9 @@
 use facet_value::Value;
 
 use crate::{
-    ConfigLayer, ConfigLoadError, ConfigModel, ConfigPath, ConfigPathSegment, ConfigSource,
-    ConfigSourceSettings, DiagnosticValue, FieldCandidate, LoadedConfig, Schema, SourceFieldPath,
-    SourceRegistration, config, config_tree,
+    ConfigLayer, ConfigLoadError, ConfigModel, ConfigPath, ConfigPathSegment, ConfigSchema,
+    ConfigSource, ConfigSourceSettings, DiagnosticValue, FieldCandidate, LoadedConfig, Schema,
+    SourceFieldPath, SourceRegistration, config, config_tree,
     engine::load_config_from_sources,
     source::{binding::BoundSource, field_candidate::SourceValueDetail},
 };
@@ -210,7 +210,7 @@ mod secrets {
     }
 
     fn layer(path: &str) -> Option<ConfigLayer> {
-        <App as ConfigModel<'static, NoPath, String>>::schema().layer(&path_of(path))
+        <App as ConfigSchema>::schema().layer(&path_of(path))
     }
 
     // r[verify macro.secret]
@@ -336,7 +336,7 @@ mod maps {
     }
 
     fn layers() -> Vec<(String, ConfigLayer)> {
-        <App as ConfigModel<'static, NoPath, String>>::schema()
+        <App as ConfigSchema>::schema()
             .fields()
             .iter()
             .map(|(pattern, layer)| (pattern.to_string(), *layer))
@@ -466,7 +466,7 @@ mod tree_generics {
     // r[verify macro.tree.enums]
     #[test]
     fn declarations_in_generic_arguments() {
-        let schema = <App as ConfigModel<'static, NoPath, String>>::schema();
+        let schema = <App as ConfigSchema>::schema();
         let fields = schema
             .fields()
             .iter()

@@ -78,5 +78,7 @@ impl ConfigViolations {
 /// The merged source values could not be decoded into the config model.
 #[derive(Clone, Debug)]
 pub struct DecodeError {
+    /// The name of the config model, or context, that failed to decode.
+    pub model: &'static str,
     pub message: String,
 }

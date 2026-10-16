@@ -4,16 +4,20 @@ use crate::{
     ConfigPath, ConfigSource, Schema, SourceFieldPath, source::registration::SourceRegistration,
 };
 
+/// The fields sources may provide values for: those of a config model, or of every context
+/// of a set declared with `config_contexts!`.
+pub trait ConfigSchema {
+    fn schema() -> &'static Schema;
+}
+
 /// A config structure that can be loaded from sources.
 ///
-/// Usually implemented with the `#[config]` attribute or the `config!` macro.
-pub trait ConfigModel<'facet, P, E>: Facet<'facet> + Sized
+/// Usually implemented with the `#[config]` attribute or the `config_tree!` macro.
+pub trait ConfigModel<'facet, P, E>: Facet<'facet> + ConfigSchema + Sized
 where
     P: SourceFieldPath,
     E: Send + Sync + 'static,
 {
-    fn schema() -> &'static Schema;
-
     /// Registers source type `S`, mapping its errors into `E` and its value details into
     /// the provenance type `P`. See [`SourceRegistration::new`].
     fn register_source<S>(

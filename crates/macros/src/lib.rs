@@ -3,6 +3,8 @@
 //! - [`macro@config`] turns a normal struct into a config struct, or an enum into one
 //!   usable in config structs.
 //! - [`config_tree!`] declares a config structure with nested structs inline.
+//! - [`config_contexts!`] declares a set of config models, contexts, loaded from the same
+//!   sources.
 //!
 //! In both, field attributes configure fields:
 //!
@@ -109,6 +111,99 @@ pub fn config_tree(input: TokenStream) -> TokenStream {
         .expand(&[])
         .unwrap_or_else(Error::into_compile_error)
         .into()
+}
+
+// r[impl macro.contexts]
+/// Declares a set of config contexts: config models loaded from the same sources, each
+/// entrypoint loading only the ones it needs.
+///
+/// Sources are checked against the fields of every context in the set, so a value for a
+/// field of any context is known, even when loading others. Contexts may share fields,
+/// with different types or requirements, such as `db` required in one and optional in
+/// another. A field that is secret in any context is secret in all of them.
+///
+/// ```ignore
+/// config_contexts!(pub AppContexts = [Http, Db, DbOpt, Mailer]);
+///
+/// let (http, db) = ConfigBuilder::<AppContexts, _, _>::new()
+///     .source_named("env", AppContexts::register_source(..), EnvSource::with_prefix("APP"))
+///     .load_contexts::<(Http, Db)>()?;
+/// ```
+#[proc_macro]
+pub fn config_contexts(input: TokenStream) -> TokenStream {
+    parse_macro_input!(input as ConfigContexts).expand().into()
+}
+
+struct ConfigContexts {
+    attrs: Vec<Attribute>,
+    vis: Visibility,
+    ident: Ident,
+    contexts: Vec<Type>,
+}
+
+impl Parse for ConfigContexts {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let attrs = input.call(Attribute::parse_outer)?;
+        let vis = input.parse()?;
+        let ident = input.parse()?;
+        input.parse::<Token![=]>()?;
+        let content;
+        syn::bracketed!(content in input);
+        let contexts = Punctuated::<Type, Token![,]>::parse_terminated(&content)?;
+        if input.peek(Token![;]) {
+            input.parse::<Token![;]>()?;
+        }
+        Ok(Self {
+            attrs,
+            vis,
+            ident,
+            contexts: contexts.into_iter().collect(),
+        })
+    }
+}
+
+impl ConfigContexts {
+    fn expand(&self) -> TokenStream2 {
+        let Self {
+            attrs,
+            vis,
+            ident,
+            contexts,
+        } = self;
+        quote! {
+            #(#attrs)*
+            #vis enum #ident {}
+
+            impl ::ordna_core::ConfigSchema for #ident {
+                fn schema() -> &'static ::ordna_core::Schema {
+                    static SHAPES: &[&::ordna_core::__private::facet::Shape] = &[
+                        #(<#contexts as ::ordna_core::__private::facet::Facet<'static>>::SHAPE,)*
+                    ];
+                    static SCHEMA: ::ordna_core::Schema = ::ordna_core::Schema::union(SHAPES);
+                    &SCHEMA
+                }
+            }
+
+            impl #ident {
+                /// Registers source type `S`, mapping its errors into `E` and its value
+                /// details into the provenance type `P`. See
+                /// [`SourceRegistration::new`](::ordna_core::SourceRegistration::new).
+                #vis fn register_source<S, P, E>(
+                    error_mapper: impl ::core::ops::Fn(S::Error) -> E
+                        + ::core::marker::Send + ::core::marker::Sync + 'static,
+                    origin_mapper: impl ::core::ops::Fn(::ordna_core::ConfigPath, S::Detail) -> P
+                        + ::core::marker::Send + ::core::marker::Sync + 'static,
+                ) -> ::ordna_core::SourceRegistration<S, P, E>
+                where
+                    S: ::ordna_core::ConfigSource,
+                {
+                    ::ordna_core::SourceRegistration::new(error_mapper, origin_mapper)
+                }
+            }
+
+            #(impl ::ordna_core::ConfigContext<#ident> for #contexts {})*
+        }
+    }
 }
 
 struct ConfigStruct {
@@ -258,15 +353,18 @@ impl ConfigStruct {
                 #(#field_tokens,)*
             }
 
+            impl ::ordna_core::ConfigSchema for #ident {
+                fn schema() -> &'static ::ordna_core::Schema {
+                    static SCHEMA: ::ordna_core::Schema = ::ordna_core::Schema::new::<#ident>();
+                    &SCHEMA
+                }
+            }
+
             impl<P, E> ::ordna_core::ConfigModel<'static, P, E> for #ident
             where
                 P: ::ordna_core::SourceFieldPath,
                 E: ::core::marker::Send + ::core::marker::Sync + 'static,
             {
-                fn schema() -> &'static ::ordna_core::Schema {
-                    static SCHEMA: ::ordna_core::Schema = ::ordna_core::Schema::new::<#ident>();
-                    &SCHEMA
-                }
             }
 
             #(#nested)*

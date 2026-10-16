@@ -47,6 +47,22 @@ is secret.
 Map entries merge across sources, so a backend's public fields can come from a public file
 and its credentials from a secrets file.
 
+## Contexts
+
+An app with several entrypoints can split its config into contexts, each entrypoint
+loading only the ones it needs. Sources are checked against the fields of every context in
+the set, so typos are still unknown paths, but a field only another entrypoint requires
+can be missing. Contexts may share fields, such as `db` required in one and optional in
+another; a field secret in any context is secret in all of them.
+
+```rust
+config_contexts!(pub AppContexts = [Http, Db, DbOpt, Mailer]);
+
+let (http, db) = ConfigBuilder::<AppContexts, _, _>::new()
+    .source_named("env", AppContexts::register_source(Error::Env, origin), env)
+    .load_contexts::<(Http, Db)>()?;
+```
+
 ## Values from the app
 
 `ValuesSource` holds values the app gives itself, by config path, such as from its own
