@@ -1,5 +1,5 @@
 use crate::{
-    ConfigLoadError, ConfigSource, FieldCandidate, Schema, SourceKind, SourceLoadError,
+    ConfigSource, FieldCandidate, Schema, SourceKind, SourceLoadError,
     source::{ConfigSourceSettings, SourceMeta, registration::SourceRegistration},
 };
 
@@ -84,12 +84,10 @@ impl<P, E> BoundSource<P, E> {
     pub(crate) fn load(
         &self,
         schema: &'static Schema,
-    ) -> Result<Vec<FieldCandidate<P>>, ConfigLoadError<E>> {
-        self.source.load(schema).map_err(|error| {
-            ConfigLoadError::Source(SourceLoadError {
-                source: self.meta.clone(),
-                error,
-            })
+    ) -> Result<Vec<FieldCandidate<P>>, SourceLoadError<E>> {
+        self.source.load(schema).map_err(|error| SourceLoadError {
+            source: self.meta.clone(),
+            error,
         })
     }
 }

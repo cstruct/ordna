@@ -14,5 +14,6 @@ categories.workspace = true
 facet = "0.46.5"
 ordna-macros = { path = "../macros", version = "0.1.2" }
 facet-core = "0.46.5"
+facet-reflect = "0.46.5"
 facet-value = "0.46.0"
 

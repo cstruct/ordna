@@ -9,7 +9,7 @@ use facet_value::{VObject, Value, from_value};
 use crate::{
     ConfigPath, ConfigSchema, FieldCandidate, Schema,
     engine::{insert_nested, required},
-    error::{ConfigViolations, DecodeError},
+    error::{ConfigViolations, DecodeError, MissingField},
 };
 
 // r[impl contexts.membership]
@@ -34,6 +34,7 @@ pub struct ContextDecoder<'a, P> {
     candidates: &'a BTreeMap<ConfigPath, Vec<FieldCandidate<P>>>,
     violations: &'a mut ConfigViolations,
     schemas: Vec<&'static Schema>,
+    values: Vec<Value>,
 }
 
 impl<'a, P> ContextDecoder<'a, P> {
@@ -45,6 +46,7 @@ impl<'a, P> ContextDecoder<'a, P> {
             candidates,
             violations,
             schemas: Vec::new(),
+            values: Vec::new(),
         }
     }
 
@@ -61,7 +63,7 @@ impl<'a, P> ContextDecoder<'a, P> {
     pub(crate) fn decode_with<T: Facet<'static>>(
         &mut self,
         schema: &'static Schema,
-        context: Option<&str>,
+        context: Option<&'static str>,
     ) -> Option<T> {
         self.schemas.push(schema);
         let mut root = VObject::new();
@@ -71,30 +73,37 @@ impl<'a, P> ContextDecoder<'a, P> {
                 insert_nested(&mut root, path, winner.value().clone());
             }
         }
-        let mut violation = |message: String| {
-            let message = match context {
+        let error = |message: String| DecodeError {
+            message: match context {
                 Some(context) => format!("{context}: {message}"),
                 None => message,
-            };
-            self.violations
-                .add_decode_violation(DecodeError { message });
+            },
         };
         let root = Value::from(root);
-        let missing = required::missing_required_fields(T::SHAPE, &root);
+        // r[impl load.partial.defaults]
+        let mut filled = root.clone();
+        let missing = required::fill_defaults(T::SHAPE, &mut filled);
+        self.values.push(filled);
         if !missing.is_empty() {
+            // r[impl load.violations.missing]
             for path in missing {
-                violation(format!("missing required field `{path}`"));
+                let message = error(format!("missing required field `{path}`"));
+                self.violations
+                    .add_missing_field_violation(MissingField { context, path }, message);
             }
             return None;
         }
         from_value::<T>(root)
-            .map_err(|error| violation(error.to_string()))
+            .map_err(|decode_error| {
+                self.violations
+                    .add_decode_violation(error(decode_error.to_string()))
+            })
             .ok()
     }
 
-    /// The schemas of the decoded contexts.
-    pub(crate) fn into_schemas(self) -> Vec<&'static Schema> {
-        self.schemas
+    /// The schemas of the decoded contexts, and their values with defaults filled in.
+    pub(crate) fn into_parts(self) -> (Vec<&'static Schema>, Vec<Value>) {
+        (self.schemas, self.values)
     }
 }
 

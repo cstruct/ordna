@@ -1,117 +1,164 @@
-use facet_core::{Def, Field, Shape, StructKind, Type, UserType};
-use facet_value::{VObject, Value};
+use facet_core::{Def, DefaultSource, Field, Shape, StructKind, Type, UserType};
+use facet_reflect::Partial;
+use facet_value::{VObject, Value, peek_to_value};
 
-/// The paths of the required fields of `shape` that `value` leaves out, such as
-/// `jwt.ttl_seconds`.
+use crate::{ConfigPath, ConfigPathSegment};
+
+/// Fills the fields `value` leaves out with the values `shape` decodes them to, returning
+/// the paths of the required fields it leaves out, such as `jwt.ttl_seconds`.
 ///
 /// `facet_value` fills a missing field with its type's `Default` when it has one, so a
 /// missing `u16` would decode as `0`. A field is required unless it's an `Option`, a map,
 /// list or set (missing means empty), has a `#[facet(default)]`, or its type or the struct
 /// it's in has a container `#[facet(default)]`.
 ///
-/// Only the parts of `value` that fit `shape` are checked; mismatches are left to decoding.
-pub(crate) fn missing_required_fields(shape: &'static Shape, value: &Value) -> Vec<String> {
-    let mut missing = Vec::new();
-    check(shape, value, &mut Vec::new(), &mut missing);
-    missing
+/// Only the parts of `value` that fit `shape` are walked; mismatches are left to decoding.
+pub(crate) fn fill_defaults(shape: &'static Shape, value: &mut Value) -> Vec<ConfigPath> {
+    let mut walker = Walker::default();
+    walker.walk(shape, value);
+    walker.missing
 }
 
-fn check(shape: &'static Shape, value: &Value, path: &mut Vec<String>, missing: &mut Vec<String>) {
-    match shape.def {
-        Def::Option(option) => {
-            if !value.is_null() {
-                check(option.t(), value, path, missing);
-            }
-        }
-        Def::Pointer(pointer) => {
-            if let Some(pointee) = pointer.pointee() {
-                check(pointee, value, path, missing);
-            }
-        }
-        Def::Map(map) => {
-            for (key, entry) in value.as_object().into_iter().flat_map(VObject::iter) {
-                path.push(key.as_str().to_owned());
-                check(map.v(), entry, path, missing);
-                path.pop();
-            }
-        }
-        Def::List(def) => check_items(def.t(), value, path, missing),
-        Def::Array(def) => check_items(def.t(), value, path, missing),
-        Def::Slice(def) => check_items(def.t(), value, path, missing),
-        Def::Set(def) => check_items(def.t(), value, path, missing),
-        Def::Undefined => match shape.ty {
-            Type::User(UserType::Struct(sd)) if sd.kind == StructKind::Struct => {
-                if let Some(object) = value.as_object() {
-                    let defaulted = shape.has_default_attr();
-                    check_fields(sd.fields, defaulted, object, path, missing);
+#[derive(Default)]
+struct Walker {
+    path: Vec<ConfigPathSegment>,
+    missing: Vec<ConfigPath>,
+}
+
+impl Walker {
+    fn walk(&mut self, shape: &'static Shape, value: &mut Value) {
+        match shape.def {
+            Def::Option(option) => {
+                if !value.is_null() {
+                    self.walk(option.t(), value);
                 }
             }
-            Type::User(UserType::Enum(ed)) => {
-                let Some(tag) = shape.get_tag_attr() else {
-                    return;
-                };
-                if shape.is_untagged() || shape.get_content_attr().is_some() {
-                    return;
+            Def::Pointer(pointer) => {
+                if let Some(pointee) = pointer.pointee() {
+                    self.walk(pointee, value);
                 }
-                let Some(object) = value.as_object() else {
-                    return;
-                };
-                let Some(name) = object.get(tag).and_then(Value::as_string) else {
-                    return;
-                };
-                let variant = ed
-                    .variants
-                    .iter()
-                    .find(|variant| variant.effective_name() == name.as_str());
-                if let Some(variant) = variant
-                    && variant.data.kind == StructKind::Struct
+            }
+            Def::Map(map) => {
+                for (key, entry) in value
+                    .as_object_mut()
+                    .into_iter()
+                    .flat_map(VObject::iter_mut)
                 {
-                    check_fields(variant.data.fields, false, object, path, missing);
+                    self.at(key.as_str(), |walker| walker.walk(map.v(), entry));
                 }
             }
+            Def::List(def) => self.items(def.t(), value),
+            Def::Array(def) => self.items(def.t(), value),
+            Def::Slice(def) => self.items(def.t(), value),
+            Def::Set(def) => self.items(def.t(), value),
+            Def::Undefined => match shape.ty {
+                Type::User(UserType::Struct(sd)) if sd.kind == StructKind::Struct => {
+                    if let Some(object) = value.as_object_mut() {
+                        let defaults = shape.has_default_attr().then_some(shape);
+                        self.fields(sd.fields, defaults, object);
+                    }
+                }
+                Type::User(UserType::Enum(ed)) => {
+                    let Some(tag) = shape.get_tag_attr() else {
+                        return;
+                    };
+                    if shape.is_untagged() || shape.get_content_attr().is_some() {
+                        return;
+                    }
+                    let Some(object) = value.as_object_mut() else {
+                        return;
+                    };
+                    let Some(name) = object.get(tag).and_then(Value::as_string) else {
+                        return;
+                    };
+                    let variant = ed
+                        .variants
+                        .iter()
+                        .find(|variant| variant.effective_name() == name.as_str());
+                    if let Some(variant) = variant
+                        && variant.data.kind == StructKind::Struct
+                    {
+                        self.fields(variant.data.fields, None, object);
+                    }
+                }
+                _ => {}
+            },
             _ => {}
-        },
-        _ => {}
-    }
-}
-
-fn check_items(
-    item: &'static Shape,
-    value: &Value,
-    path: &mut Vec<String>,
-    missing: &mut Vec<String>,
-) {
-    let items = value.as_array().map(|array| &array[..]).unwrap_or_default();
-    for (index, element) in items.iter().enumerate() {
-        path.push(index.to_string());
-        check(item, element, path, missing);
-        path.pop();
-    }
-}
-
-fn check_fields(
-    fields: &'static [Field],
-    defaulted: bool,
-    object: &VObject,
-    path: &mut Vec<String>,
-    missing: &mut Vec<String>,
-) {
-    for field in fields {
-        if field.is_flattened() {
-            check(field.shape(), &Value::from(object.clone()), path, missing);
-            continue;
         }
-        let name = field.effective_name();
-        let entry = object
-            .get(name)
-            .or_else(|| field.alias.and_then(|alias| object.get(alias)));
-        path.push(name.to_owned());
-        match entry {
-            Some(entry) => check(field.shape(), entry, path, missing),
-            None if !defaulted && is_required(field) => missing.push(path.join(".")),
-            None => {}
+    }
+
+    fn items(&mut self, item: &'static Shape, value: &mut Value) {
+        let items = value.as_array_mut().map(|array| &mut array[..]);
+        for (index, element) in items.unwrap_or_default().iter_mut().enumerate() {
+            self.at(&index.to_string(), |walker| walker.walk(item, element));
         }
-        path.pop();
+    }
+
+    /// Walks the `fields` of a struct or variant in `object`. Missing fields are filled from
+    /// the `Default` of `defaults`, the struct, if it has a container `#[facet(default)]`.
+    fn fields(
+        &mut self,
+        fields: &'static [Field],
+        defaults: Option<&'static Shape>,
+        object: &mut VObject,
+    ) {
+        let mut container_default = None;
+        for field in fields {
+            if field.is_flattened() {
+                self.flattened(field.shape(), object);
+                continue;
+            }
+            let name = field.effective_name();
+            let key = match field.alias {
+                Some(alias) if !object.contains_key(name) && object.contains_key(alias) => alias,
+                _ => name,
+            };
+            if let Some(entry) = object.get_mut(key) {
+                self.at(name, |walker| walker.walk(field.shape(), entry));
+                continue;
+            }
+            let default = match defaults {
+                Some(shape) => container_default
+                    .get_or_insert_with(|| default_value(shape, None))
+                    .as_ref()
+                    .and_then(Value::as_object)
+                    .and_then(|object| object.get(name).cloned()),
+                None if is_required(field) => {
+                    self.at(name, |walker| walker.missing.push(walker.config_path()));
+                    continue;
+                }
+                None => default_value(field.shape(), field.default_source()),
+            };
+            if let Some(default) = default {
+                object.insert(name, default);
+            }
+        }
+    }
+
+    /// Walks a flattened field, whose fields are in the same `object` as its siblings'.
+    fn flattened(&mut self, shape: &'static Shape, object: &mut VObject) {
+        match shape.ty {
+            Type::User(UserType::Struct(sd)) if sd.kind == StructKind::Struct => {
+                let defaults = shape.has_default_attr().then_some(shape);
+                self.fields(sd.fields, defaults, object);
+            }
+            _ => {
+                let mut flattened = Value::from(object.clone());
+                self.walk(shape, &mut flattened);
+            }
+        }
+    }
+
+    fn at(&mut self, segment: &str, f: impl FnOnce(&mut Self)) {
+        let segment = ConfigPathSegment::parse(segment.to_owned())
+            .expect("field names and keys of config paths are valid segments");
+        self.path.push(segment);
+        f(self);
+        self.path.pop();
+    }
+
+    fn config_path(&self) -> ConfigPath {
+        ConfigPath::new(self.path.clone())
     }
 }
 
@@ -124,6 +171,25 @@ fn is_required(field: &Field) -> bool {
         )
 }
 
+/// The default of `shape` as a value: from `source` if given, else from the type's
+/// `Default`, if it has one and it can be represented as a value.
+fn default_value(shape: &'static Shape, source: Option<&DefaultSource>) -> Option<Value> {
+    // SAFETY: `shape` is the shape of a real type, from its `Facet` impl.
+    let partial = unsafe { Partial::alloc_shape_owned(shape) }.ok()?;
+    let partial = match source {
+        // SAFETY: a field's default function initializes a value of the field's type.
+        Some(DefaultSource::Custom(default)) => unsafe {
+            partial.set_from_function(|ptr| {
+                default(ptr);
+                Ok(())
+            })
+        },
+        Some(DefaultSource::FromTrait) | None => partial.set_default(),
+    };
+    let value = partial.ok()?.build().ok()?;
+    peek_to_value(value.peek()).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -131,7 +197,7 @@ mod tests {
     use facet::Facet;
     use facet_value::value;
 
-    use super::missing_required_fields;
+    use super::fill_defaults;
 
     #[derive(Facet)]
     struct Tls {
@@ -184,8 +250,11 @@ mod tests {
         backends: HashMap<String, Backend>,
     }
 
-    fn missing(value: facet_value::Value) -> Vec<String> {
-        missing_required_fields(App::SHAPE, &value)
+    fn missing(mut value: facet_value::Value) -> Vec<String> {
+        fill_defaults(App::SHAPE, &mut value)
+            .iter()
+            .map(ToString::to_string)
+            .collect()
     }
 
     #[test]

@@ -6,8 +6,10 @@ use std::collections::{BTreeMap, btree_map::Entry};
 use facet_value::{VObject, Value};
 
 use crate::{
-    ConfigContexts, ConfigLayer, ConfigLoadError, ConfigModel, ConfigPath, ConfigSchema,
-    ConfigValueSource, FieldCandidate, LoadedConfig, Schema, SourceFieldPath, SourceResolution,
+    ConfigContexts, ConfigLayer, ConfigModel, ConfigPath, ConfigSchema, ConfigValueSource,
+    FieldCandidate, LoadedConfig, PartialConfig, PartialLoadError, Schema, SourceFieldPath,
+    SourceLoadError, SourceResolution,
+    builder::Provenance,
     contexts::ContextDecoder,
     error::ConfigViolations,
     issue::{ConflictIssue, LayerMismatchIssue},
@@ -21,10 +23,10 @@ use crate::{
 /// the shadowed ones, most recent first. A source may only provide values for fields of its own layer:
 /// public sources for public fields, secret sources for secret fields. All violations
 /// (unknown paths, conflicts within one source, layer mismatches and decode failures) are
-/// collected and returned together.
+/// collected and returned together, with what the load got to.
 pub(crate) fn load_config_from_sources<T, P, E>(
     sources: Vec<BoundSource<P, E>>,
-) -> Result<LoadedConfig<'static, T, P, E>, ConfigLoadError<E>>
+) -> Result<LoadedConfig<'static, T, P, E>, PartialLoadError<P, E>>
 where
     E: Send + Sync + 'static,
     T: ConfigModel<'static, P, E>,
@@ -41,7 +43,7 @@ where
 /// fields. See [`load_config_from_sources`].
 pub(crate) fn load_contexts_from_sources<C, T, P, E>(
     sources: Vec<BoundSource<P, E>>,
-) -> Result<LoadedConfig<'static, T, P, E>, ConfigLoadError<E>>
+) -> Result<LoadedConfig<'static, T, P, E>, PartialLoadError<P, E>>
 where
     E: Send + Sync + 'static,
     C: ConfigSchema,
@@ -56,7 +58,7 @@ fn load_from_sources<T, P, E>(
     schema: &'static Schema,
     sources: Vec<BoundSource<P, E>>,
     decode: impl FnOnce(&mut ContextDecoder<'_, P>) -> Option<T>,
-) -> Result<LoadedConfig<'static, T, P, E>, ConfigLoadError<E>>
+) -> Result<LoadedConfig<'static, T, P, E>, PartialLoadError<P, E>>
 where
     E: Send + Sync + 'static,
     P: SourceFieldPath,
@@ -67,7 +69,8 @@ where
     // Every candidate per path, in source order. The last one wins.
     let mut candidates = BTreeMap::<ConfigPath, Vec<FieldCandidate<P>>>::new();
     for source in &sources {
-        let source_candidates = load_config_from_source(source, schema, &mut violations)?;
+        let source_candidates = load_config_from_source(source, schema, &mut violations)
+            .map_err(PartialLoadError::Source)?;
         for candidate in source_candidates {
             candidates
                 .entry(candidate.path().clone())
@@ -76,35 +79,72 @@ where
         }
     }
 
-    // r[impl load.violations.collect]
-    if violations.has_violations() {
-        return Err(ConfigLoadError::Violations(violations));
-    }
-
-    let mut decoder = ContextDecoder::new(&candidates, &mut violations);
+    // Decoded even when the sources have violations, for the values of a partial load.
+    let mut decode_violations = ConfigViolations::default();
+    let mut decoder = ContextDecoder::new(&candidates, &mut decode_violations);
     let config = decode(&mut decoder);
-    let decoded = decoder.into_schemas();
-    let Some(config) = config else {
-        return Err(ConfigLoadError::Violations(violations));
-    };
+    let (decoded, values) = decoder.into_parts();
 
     // r[impl provenance.winner]
     // r[impl provenance.shadowed]
     // r[impl provenance.list]
     // r[impl contexts.provenance]
-    let sources = candidates
-        .into_iter()
-        .filter(|(path, _)| decoded.iter().any(|schema| schema.layer(path).is_some()))
-        .map(|(path, contenders)| {
-            let mut origins = contenders
-                .into_iter()
-                .rev()
-                .map(|candidate| ConfigValueSource::Direct(candidate.into_detail()));
-            let winner = origins.next().expect("entries always hold a candidate");
-            (path, SourceResolution::new(winner, origins.collect()))
-        })
-        .collect();
-    Ok(LoadedConfig::new(config, sources))
+    let provenance = Provenance::new(
+        candidates
+            .into_iter()
+            .filter(|(path, _)| decoded.iter().any(|schema| schema.layer(path).is_some()))
+            .map(|(path, contenders)| {
+                let mut origins = contenders
+                    .into_iter()
+                    .rev()
+                    .map(|candidate| ConfigValueSource::Direct(candidate.into_detail()));
+                let winner = origins.next().expect("entries always hold a candidate");
+                (path, SourceResolution::new(winner, origins.collect()))
+            })
+            .collect(),
+    );
+
+    // r[impl load.violations.collect]
+    // r[impl load.partial.violations]
+    // Decode violations are left out when the sources have violations, which they may
+    // follow from, such as a required field missing because its path was mistyped.
+    let config = match config {
+        Some(config) if !violations.has_violations() => config,
+        _ => {
+            if !violations.has_violations() {
+                violations.extend(decode_violations);
+            }
+            let mut value = VObject::new();
+            for context in values {
+                // r[impl contexts.partial]
+                if let Some(context) = context.as_object() {
+                    merge_missing(&mut value, context);
+                }
+            }
+            return Err(PartialLoadError::Violations(Box::new(PartialConfig::new(
+                value.into(),
+                provenance,
+                violations,
+            ))));
+        }
+    };
+    Ok(LoadedConfig::new(config, provenance))
+}
+
+/// Inserts the entries of `from` that `into` doesn't have, merging objects both have.
+fn merge_missing(into: &mut VObject, from: &VObject) {
+    for (key, value) in from.iter() {
+        match into.get_mut(key.as_str()) {
+            Some(existing) => {
+                if let (Some(into), Some(from)) = (existing.as_object_mut(), value.as_object()) {
+                    merge_missing(into, from);
+                }
+            }
+            None => {
+                into.insert(key.as_str(), value.clone());
+            }
+        }
+    }
 }
 
 /// Loads the candidates of one source, dropping (or reporting) unknown paths and
@@ -114,7 +154,7 @@ fn load_config_from_source<P, E>(
     bound_source: &BoundSource<P, E>,
     schema: &'static crate::Schema,
     violations: &mut ConfigViolations,
-) -> Result<Vec<FieldCandidate<P>>, ConfigLoadError<E>>
+) -> Result<Vec<FieldCandidate<P>>, SourceLoadError<E>>
 where
     E: Send + Sync + 'static,
 {
@@ -204,7 +244,8 @@ mod tests {
     use super::load_config_from_sources;
     use crate::{
         ConfigLoadError, ConfigModel, ConfigPath, ConfigPathSegment, ConfigSource,
-        ConfigSourceSettings, FieldCandidate, Schema, SourceFieldPath, SourceRegistration,
+        ConfigSourceSettings, FieldCandidate, LoadedConfig, Schema, SourceFieldPath,
+        SourceRegistration,
         source::{binding::BoundSource, field_candidate::SourceValueDetail},
     };
 
@@ -220,6 +261,7 @@ mod tests {
         jwt: Jwt,
     }
 
+    #[derive(Debug)]
     struct NoPath;
     impl SourceFieldPath for NoPath {
         fn field_path(&self) -> &ConfigPath {
@@ -282,6 +324,12 @@ mod tests {
         )
     }
 
+    fn load(
+        sources: Vec<BoundSource<NoPath, String>>,
+    ) -> Result<LoadedConfig<'static, App, NoPath, String>, ConfigLoadError<String>> {
+        Ok(load_config_from_sources(sources)?)
+    }
+
     fn path(segments: &[&'static str]) -> ConfigPath {
         ConfigPath::new(segments.iter().map(|s| ConfigPathSegment::new(s)).collect())
     }
@@ -297,7 +345,7 @@ mod tests {
             ]),
             source(vec![(path(&["jwt", "ttl_seconds"]), Value::from(120u32))]),
         ];
-        let loaded = load_config_from_sources::<App, NoPath, String>(sources).unwrap();
+        let loaded = load(sources).unwrap();
         assert_eq!(
             loaded.config(),
             &App {
@@ -318,9 +366,7 @@ mod tests {
             (path(&["jwt", "ttl_seconds"]), Value::from(1u32)),
             (path(&["jwt", "issuer", "nope"]), Value::from("nope")),
         ])];
-        let Err(ConfigLoadError::Violations(violations)) =
-            load_config_from_sources::<App, NoPath, String>(sources)
-        else {
+        let Err(ConfigLoadError::Violations(violations)) = load(sources) else {
             panic!("expected violations");
         };
         assert_eq!(violations.unknown_paths().len(), 1);
@@ -338,7 +384,7 @@ mod tests {
                 (path(&["jwt", "nope"]), Value::from("nope")),
             ],
         )];
-        let loaded = load_config_from_sources::<App, NoPath, String>(sources).unwrap();
+        let loaded = load(sources).unwrap();
         assert_eq!(loaded.config().jwt.ttl_seconds, 1);
         assert!(loaded.source(&path(&["jwt", "nope"])).is_none());
     }
@@ -351,9 +397,7 @@ mod tests {
             (path(&["name"]), Value::from("b")),
             (path(&["jwt", "ttl_seconds"]), Value::from(1u32)),
         ])];
-        let Err(ConfigLoadError::Violations(violations)) =
-            load_config_from_sources::<App, NoPath, String>(sources)
-        else {
+        let Err(ConfigLoadError::Violations(violations)) = load(sources) else {
             panic!("expected violations");
         };
         let [conflict] = violations.conflicts() else {
@@ -370,7 +414,7 @@ mod tests {
             (path(&["name"]), Value::from("app")),
             (path(&["jwt", "ttl_seconds"]), Value::from("60")),
         ])];
-        let loaded = load_config_from_sources::<App, NoPath, String>(sources).unwrap();
+        let loaded = load(sources).unwrap();
         assert_eq!(loaded.config().jwt.ttl_seconds, 60);
     }
 
@@ -378,18 +422,14 @@ mod tests {
     #[test]
     fn missing_required_fields_fail_to_decode() {
         let sources = vec![source(vec![(path(&["name"]), Value::from("app"))])];
-        let Err(ConfigLoadError::Violations(violations)) =
-            load_config_from_sources::<App, NoPath, String>(sources)
-        else {
+        let Err(ConfigLoadError::Violations(violations)) = load(sources) else {
             panic!("expected violations");
         };
         assert_eq!(violations.decode_errors().len(), 1);
     }
 
     fn decode_messages(sources: Vec<BoundSource<NoPath, String>>) -> Vec<String> {
-        let Err(ConfigLoadError::Violations(violations)) =
-            load_config_from_sources::<App, NoPath, String>(sources)
-        else {
+        let Err(ConfigLoadError::Violations(violations)) = load(sources) else {
             panic!("expected violations");
         };
         violations

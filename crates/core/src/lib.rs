@@ -12,9 +12,11 @@ mod schema;
 mod source;
 mod values;
 
-pub use builder::{ConfigBuilder, LoadedConfig};
+pub use builder::{ConfigBuilder, LoadedConfig, PartialConfig};
 pub use contexts::{ConfigContext, ConfigContexts, ContextDecoder};
-pub use error::{ConfigLoadError, ConfigViolations, DecodeError, SourceLoadError};
+pub use error::{
+    ConfigLoadError, ConfigViolations, DecodeError, MissingField, PartialLoadError, SourceLoadError,
+};
 pub use issue::{ConflictIssue, DiagnosticValue, LayerMismatchIssue, UnknownPathIssue};
 pub use model::{ConfigModel, ConfigSchema};
 pub use path::{

@@ -25,7 +25,13 @@ Each loaded context MUST be decoded from the values of its own fields only, so v
 fields of other contexts can't make it fail.
 
 r[contexts.decode.collect]
-Decode violations of every loaded context MUST be collected and reported together.
+Decode violations of every loaded context MUST be collected and reported together. A
+missing field MUST be reported with the context requiring it.
+
+r[contexts.partial]
+The merged values of a partial load of contexts MUST hold the fields of every loaded
+context. A missing field shared by contexts MUST be set to the default of the first
+context listed that has one.
 
 r[contexts.membership]
 Loading a context that isn't part of the context set MUST be a compile error.
