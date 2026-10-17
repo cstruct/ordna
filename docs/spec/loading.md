@@ -57,6 +57,28 @@ A source MUST only provide values for fields of its own layer. A public source p
 value for a secret field, or a secret source providing a value for a public field, MUST be
 reported as a layer mismatch violation.
 
+r[load.violations.missing]
+Every required field missing from the merged values MUST be reported with its config path,
+along with its decode violation.
+
 r[load.diagnostics.redact]
 Values in violations MUST be fully redacted when either the source or the field they
 target is secret.
+
+## Partial loads
+
+A partial load fails with what it got to, such as to show the config set so far along with
+the fields still missing.
+
+r[load.partial]
+When loading fails with violations, a partial load MUST fail with the violations together
+with the merged values of the model's fields and their provenance, as a loaded config
+would record it.
+
+r[load.partial.defaults]
+The merged values of a partial load MUST have every missing field that isn't required set
+to the value it decodes to by default, and required fields left out.
+
+r[load.partial.violations]
+A partial load MUST report the violations a load reports: decode violations only when the
+sources have no other violations.

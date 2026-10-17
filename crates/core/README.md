@@ -36,6 +36,27 @@ let port = loaded.source(&ConfigPath::parse("port")?).unwrap();
 println!("{:?} shadowed {:?}", port.winner(), port.shadowed());
 ```
 
+## Partial loads
+
+`load_with_meta_or_partial` (and `load_contexts_with_meta_or_partial`) fails with what the
+load got to: the values set so far, as the sources gave them, with their provenance and
+the defaults of the fields that aren't required filled in, along with the violations. It
+also includes the required fields still missing, by path. Use it to show the config so far
+with the missing fields marked:
+
+```rust
+match builder.load_with_meta_or_partial() {
+    Ok(loaded) => show(&loaded),
+    Err(PartialLoadError::Violations(partial)) => {
+        show_partial(partial.value(), |path| partial.source(path));
+        for missing in partial.missing_fields() {
+            eprintln!("missing {}", missing.path);
+        }
+    }
+    Err(PartialLoadError::Source(error)) => return Err(error.into()),
+}
+```
+
 ## Secrets
 
 Fields marked `#[config(secret)]` (or `#[facet(sensitive)]`) are secret, along with every

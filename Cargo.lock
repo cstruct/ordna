@@ -415,6 +415,7 @@ name = "integration-tests"
 version = "0.1.2"
 dependencies = [
  "facet",
+ "facet-value",
  "ordna-core",
  "ordna-source-env",
  "ordna-source-file",
@@ -494,6 +495,7 @@ version = "0.1.2"
 dependencies = [
  "facet",
  "facet-core",
+ "facet-reflect",
  "facet-value",
  "ordna-macros",
 ]

@@ -1,9 +1,13 @@
 use std::{collections::BTreeMap, marker::PhantomData};
 
+use facet_value::Value;
+
 use crate::{
     ConfigContext, ConfigContexts, ConfigLoadError, ConfigModel, ConfigPath, ConfigSchema,
-    ConfigSource, ConfigValueSource, SourceFieldPath, SourceResolution,
+    ConfigSource, ConfigValueSource, MissingField, PartialLoadError, SourceFieldPath,
+    SourceResolution,
     engine::{load_config_from_sources, load_contexts_from_sources},
+    error::ConfigViolations,
     source::{binding::BoundSource, registration::SourceRegistration},
 };
 
@@ -168,6 +172,12 @@ where
     }
 
     pub fn load_with_meta(self) -> Result<LoadedConfig<'static, T, P, E>, ConfigLoadError<E>> {
+        Ok(self.load_with_meta_or_partial()?)
+    }
+
+    pub fn load_with_meta_or_partial(
+        self,
+    ) -> Result<LoadedConfig<'static, T, P, E>, PartialLoadError<P, E>> {
         load_config_from_sources(self.sources)
     }
 }
@@ -190,6 +200,12 @@ where
     fn load_contexts_with_meta<X: ConfigContexts<C>>(
         self,
     ) -> Result<LoadedConfig<'static, X, P, E>, ConfigLoadError<E>> {
+        Ok(self.load_contexts_with_meta_or_partial()?)
+    }
+
+    fn load_contexts_with_meta_or_partial<X: ConfigContexts<C>>(
+        self,
+    ) -> Result<LoadedConfig<'static, X, P, E>, PartialLoadError<P, E>> {
         load_contexts_from_sources::<C, X, P, E>(self.sources)
     }
 }
@@ -207,6 +223,14 @@ where
     pub fn load_with_meta(self) -> Result<LoadedConfig<'static, T, P, E>, ConfigLoadError<E>> {
         self.0.load_with_meta()
     }
+
+    /// Like [`Self::load_with_meta`], failing with what the load got to when the sources
+    /// have violations, such as to show the config set so far along with the fields missing.
+    pub fn load_with_meta_or_partial(
+        self,
+    ) -> Result<LoadedConfig<'static, T, P, E>, PartialLoadError<P, E>> {
+        self.0.load_with_meta_or_partial()
+    }
 }
 
 impl<T, P, E> ConfigBuilderNamed<'static, T, P, E>
@@ -221,6 +245,14 @@ where
 
     pub fn load_with_meta(self) -> Result<LoadedConfig<'static, T, P, E>, ConfigLoadError<E>> {
         self.0.load_with_meta()
+    }
+
+    /// Like [`Self::load_with_meta`], failing with what the load got to when the sources
+    /// have violations, such as to show the config set so far along with the fields missing.
+    pub fn load_with_meta_or_partial(
+        self,
+    ) -> Result<LoadedConfig<'static, T, P, E>, PartialLoadError<P, E>> {
+        self.0.load_with_meta_or_partial()
     }
 }
 
@@ -250,6 +282,14 @@ where
     ) -> Result<LoadedConfig<'static, X, P, E>, ConfigLoadError<E>> {
         self.0.load_contexts_with_meta()
     }
+
+    /// Like [`Self::load_contexts_with_meta`], failing with what the load got to when the
+    /// sources have violations.
+    pub fn load_contexts_with_meta_or_partial<X: ConfigContexts<C>>(
+        self,
+    ) -> Result<LoadedConfig<'static, X, P, E>, PartialLoadError<P, E>> {
+        self.0.load_contexts_with_meta_or_partial()
+    }
 }
 
 impl<C, P, E> ConfigBuilderNamed<'static, C, P, E>
@@ -278,6 +318,14 @@ where
     ) -> Result<LoadedConfig<'static, X, P, E>, ConfigLoadError<E>> {
         self.0.load_contexts_with_meta()
     }
+
+    /// Like [`Self::load_contexts_with_meta`], failing with what the load got to when the
+    /// sources have violations.
+    pub fn load_contexts_with_meta_or_partial<X: ConfigContexts<C>>(
+        self,
+    ) -> Result<LoadedConfig<'static, X, P, E>, PartialLoadError<P, E>> {
+        self.0.load_contexts_with_meta_or_partial()
+    }
 }
 
 /// A loaded config model, or tuple of contexts, with the provenance of every set field.
@@ -287,8 +335,7 @@ where
     P: SourceFieldPath,
 {
     config: T,
-    sources: Vec<(ConfigPath, SourceResolution<P>)>,
-    source_index: BTreeMap<ConfigPath, usize>,
+    provenance: Provenance<P>,
     _error_type: PhantomData<&'facet E>,
 }
 
@@ -301,7 +348,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LoadedConfig")
             .field("config", &self.config)
-            .field("sources", &self.sources)
+            .field("sources", &self.provenance.sources)
             .finish()
     }
 }
@@ -311,16 +358,10 @@ where
     E: Send + Sync + 'static,
     P: SourceFieldPath,
 {
-    pub(crate) fn new(config: T, sources: Vec<(ConfigPath, SourceResolution<P>)>) -> Self {
-        let source_index = sources
-            .iter()
-            .enumerate()
-            .map(|(index, (path, _))| (path.clone(), index))
-            .collect();
+    pub(crate) fn new(config: T, provenance: Provenance<P>) -> Self {
         Self {
             config,
-            sources,
-            source_index,
+            provenance,
             _error_type: PhantomData,
         }
     }
@@ -333,17 +374,90 @@ where
     }
     // r[impl provenance.unset]
     pub fn source(&self, path: &ConfigPath) -> Option<&SourceResolution<P>> {
-        let index = *self.source_index.get(path)?;
-        let (_, source_resolution) = self.sources.get(index)?;
-        Some(source_resolution)
+        self.provenance.source(path)
     }
     pub fn shadow_chain(&self, path: &ConfigPath) -> Option<&[ConfigValueSource<P>]> {
-        let index = self.source_index.get(path).copied()?;
-        let (_, source_resolution) = self.sources.get(index)?;
-        Some(source_resolution.shadowed())
+        Some(self.provenance.source(path)?.shadowed())
     }
     // r[impl provenance.list]
     pub fn sources(&self) -> &[(ConfigPath, SourceResolution<P>)] {
-        self.sources.as_slice()
+        &self.provenance.sources
+    }
+}
+
+// r[impl load.partial]
+/// What a load got to when it failed with violations: the values of the fields of the
+/// config model (or of the loaded contexts), their provenance, and the violations.
+#[derive(Clone, Debug)]
+pub struct PartialConfig<P: SourceFieldPath> {
+    value: Value,
+    provenance: Provenance<P>,
+    violations: ConfigViolations,
+}
+
+impl<P: SourceFieldPath> PartialConfig<P> {
+    pub(crate) fn new(
+        value: Value,
+        provenance: Provenance<P>,
+        violations: ConfigViolations,
+    ) -> Self {
+        Self {
+            value,
+            provenance,
+            violations,
+        }
+    }
+
+    /// The merged values as an object, missing fields left out and the fields that aren't
+    /// required filled with the values they decode to by default, such as `null` for an
+    /// `Option`. Contexts sharing a field share its value; a default fills it from the
+    /// first context listed that has one.
+    pub fn value(&self) -> &Value {
+        &self.value
+    }
+    pub fn violations(&self) -> &ConfigViolations {
+        &self.violations
+    }
+    pub fn into_violations(self) -> ConfigViolations {
+        self.violations
+    }
+    /// The required fields no source set. See [`ConfigViolations::missing_fields`].
+    pub fn missing_fields(&self) -> &[MissingField] {
+        self.violations.missing_fields()
+    }
+    pub fn source(&self, path: &ConfigPath) -> Option<&SourceResolution<P>> {
+        self.provenance.source(path)
+    }
+    pub fn shadow_chain(&self, path: &ConfigPath) -> Option<&[ConfigValueSource<P>]> {
+        Some(self.provenance.source(path)?.shadowed())
+    }
+    pub fn sources(&self) -> &[(ConfigPath, SourceResolution<P>)] {
+        &self.provenance.sources
+    }
+}
+
+/// The provenance of every set field, sorted by config path.
+#[derive(Clone, Debug)]
+pub(crate) struct Provenance<P: SourceFieldPath> {
+    sources: Vec<(ConfigPath, SourceResolution<P>)>,
+    source_index: BTreeMap<ConfigPath, usize>,
+}
+
+impl<P: SourceFieldPath> Provenance<P> {
+    pub(crate) fn new(sources: Vec<(ConfigPath, SourceResolution<P>)>) -> Self {
+        let source_index = sources
+            .iter()
+            .enumerate()
+            .map(|(index, (path, _))| (path.clone(), index))
+            .collect();
+        Self {
+            sources,
+            source_index,
+        }
+    }
+
+    fn source(&self, path: &ConfigPath) -> Option<&SourceResolution<P>> {
+        let (_, resolution) = self.sources.get(*self.source_index.get(path)?)?;
+        Some(resolution)
     }
 }

@@ -76,7 +76,9 @@ fn try_load<T: ConfigModel<'static, NoPath, String>>(
             BoundSource::new_anonymous(TestSource(layer, values), registration())
         })
         .collect();
-    load_config_from_sources::<T, NoPath, String>(sources).map(LoadedConfig::into_config)
+    load_config_from_sources::<T, NoPath, String>(sources)
+        .map(LoadedConfig::into_config)
+        .map_err(Into::into)
 }
 
 fn load<T: ConfigModel<'static, NoPath, String>>(values: Values) -> T {
