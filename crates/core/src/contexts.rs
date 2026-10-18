@@ -107,8 +107,19 @@ impl<'a, P> ContextDecoder<'a, P> {
     }
 }
 
+// r[impl contexts.tuples]
+/// Implements [`ConfigContexts`] for tuples of every length up to that of the list given,
+/// dropping its first name for each shorter one.
 macro_rules! tuple_contexts {
-    ($($context:ident),+) => {
+    ($first:ident $(, $rest:ident)*) => {
+        tuple_contexts!(@impl $first $(, $rest)*);
+        tuple_contexts!(@next $($rest),*);
+    };
+    (@next) => {};
+    (@next $($rest:ident),+) => {
+        tuple_contexts!($($rest),+);
+    };
+    (@impl $($context:ident),+) => {
         impl<C, $($context: ConfigContext<C>),+> ConfigContexts<C> for ($($context,)+) {
             #[allow(non_snake_case, reason = "the values are named after their types")]
             fn decode<P>(decoder: &mut ContextDecoder<'_, P>) -> Option<Self> {
@@ -121,11 +132,6 @@ macro_rules! tuple_contexts {
     };
 }
 
-tuple_contexts!(A);
-tuple_contexts!(A, B);
-tuple_contexts!(A, B, C2);
-tuple_contexts!(A, B, C2, D);
-tuple_contexts!(A, B, C2, D, E);
-tuple_contexts!(A, B, C2, D, E, F);
-tuple_contexts!(A, B, C2, D, E, F, G);
-tuple_contexts!(A, B, C2, D, E, F, G, H);
+tuple_contexts!(
+    T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16
+);
