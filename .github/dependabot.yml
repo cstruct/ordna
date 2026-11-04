@@ -1,0 +1,23 @@
+# Keeps dependencies and actions current, as pinning them alone doesn't.
+# The cooldown waits a week after a release before proposing it, so a broken or
+# malicious release has time to be yanked first. Security updates skip it.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      cargo:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
