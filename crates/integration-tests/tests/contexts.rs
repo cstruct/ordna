@@ -224,3 +224,58 @@ fn a_single_context_loads_without_a_tuple() {
         .unwrap();
     assert_eq!(http.port, 8080);
 }
+
+/// Contexts each with one required field, named after it.
+macro_rules! contexts {
+    ($($context:ident: $field:ident),+) => {
+        $(
+            #[config]
+            #[derive(Debug, PartialEq)]
+            pub struct $context {
+                pub $field: u16,
+            }
+        )+
+
+        config_contexts!(pub ManyContexts = [$($context),+]);
+    };
+}
+
+contexts!(
+    C1: c1, C2: c2, C3: c3, C4: c4, C5: c5, C6: c6, C7: c7, C8: c8,
+    C9: c9, C10: c10, C11: c11, C12: c12, C13: c13, C14: c14, C15: c15, C16: c16
+);
+
+// r[verify contexts.tuples]
+#[test]
+fn up_to_sixteen_contexts_load_together() {
+    let given = (1..=16)
+        .map(|n| (path(&format!("c{n}")), n.to_string()))
+        .collect::<ValuesSource>();
+    let loaded = ConfigBuilder::<ManyContexts, Given, Infallible>::new()
+        .source(
+            ManyContexts::register_source(|never| match never {}, |path, _| Given(path)),
+            given,
+        )
+        .load_contexts::<(
+            C1,
+            C2,
+            C3,
+            C4,
+            C5,
+            C6,
+            C7,
+            C8,
+            C9,
+            C10,
+            C11,
+            C12,
+            C13,
+            C14,
+            C15,
+            C16,
+        )>()
+        .unwrap();
+    assert_eq!(loaded.0, C1 { c1: 1 });
+    assert_eq!(loaded.8, C9 { c9: 9 });
+    assert_eq!(loaded.15, C16 { c16: 16 });
+}
