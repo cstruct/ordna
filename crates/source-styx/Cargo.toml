@@ -15,6 +15,10 @@ ordna-core = { path = "../core", version = "0.1.3" }
 ordna-source-file = { path = "../source-file", version = "0.1.3" }
 facet-styx = "4.0.0"
 facet-value = "0.46.0"
+# Not used directly. facet-reflect 0.46 accepts any smallvec 2.0 pre-release, and
+# 2.0.0-beta.4 adds a From impl that conflicts with one in facet-styx 4.0.0. Drop
+# this once a facet release pins smallvec itself.
+smallvec = "=2.0.0-beta.3"
 
 [dev-dependencies]
 facet = "0.46.5"

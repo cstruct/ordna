@@ -547,6 +547,7 @@ dependencies = [
  "facet-value",
  "ordna-core",
  "ordna-source-file",
+ "smallvec",
 ]
 
 [[package]]
@@ -726,9 +727,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "2.0.0-beta.2"
+version = "2.0.0-beta.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea3c9b717472722a7bf1def25b976350fc5d2f57bd710e83d96de1f211e035cf"
+checksum = "260f642f866b34ad70fb59f47aed43ab21c36d5d82891f82b0cf4cd551a187d2"
 
 [[package]]
 name = "strsim"
