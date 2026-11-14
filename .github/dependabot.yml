@@ -9,6 +9,10 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    # smallvec is pinned in crates/source-styx/Cargo.toml to dodge a conflict
+    # with facet-styx; bumping it breaks the build.
+    ignore:
+      - dependency-name: smallvec
     groups:
       cargo:
         update-types: [minor, patch]
