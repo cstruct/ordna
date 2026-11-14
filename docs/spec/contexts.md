@@ -33,6 +33,9 @@ The merged values of a partial load of contexts MUST hold the fields of every lo
 context. A missing field shared by contexts MUST be set to the default of the first
 context listed that has one.
 
+r[contexts.tuples]
+Up to 16 contexts MUST be loadable together, as a tuple.
+
 r[contexts.membership]
 Loading a context that isn't part of the context set MUST be a compile error.
 
